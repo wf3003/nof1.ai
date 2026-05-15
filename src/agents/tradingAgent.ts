@@ -25,6 +25,7 @@ import { createLogger } from "../utils/loggerUtils";
 import { createOpenAI } from "@ai-sdk/openai";
 import * as tradingTools from "../tools/trading";
 import { formatChinaTime } from "../utils/timeUtils";
+import { getRecentClosedTrades, getRecentTrades, summarizeClosedTrades, getMostRecentCloseTrade } from "./tradeHistoryUtils";
 import { RISK_PARAMS } from "../config/riskParams";
 
 /**
@@ -389,45 +390,33 @@ ${newsContent}`;
     }
   }
 
-  // 输出历史交易记录
   if (tradeHistory && tradeHistory.length > 0) {
+    const recentTrades = getRecentTrades(tradeHistory, 10);
+    const recentClosedTrades = getRecentClosedTrades(tradeHistory, 10);
+    const summary = summarizeClosedTrades(recentClosedTrades);
+
     dataPrompt += `---
 【最近交易记录】
 ---
 
 `;
-    let profitCount = 0;
-    let lossCount = 0;
-    let longCount = 0;
-    let shortCount = 0;
-    let totalProfit = 0;
-    
-    for (const trade of tradeHistory.slice(0, 10)) {
+    for (const trade of recentTrades) {
       const tradeTime = formatChinaTime(trade.timestamp);
       const pnl = trade?.pnl ?? 0;
       
-      dataPrompt += `${trade.symbol}_USDT ${trade.side === 'long' ? '做多' : '做空'}:
+      dataPrompt += `${trade.symbol}_USDT ${trade.side === 'long' ? '做多' : '做空'} ${trade.type === 'close' ? '平仓' : '开仓'}:
   时间: ${tradeTime}
-  盈亏: ${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)} USDT
-
+${trade.type === 'close' ? `  盈亏: ${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)} USDT
+` : ''}
 `;
-      
-      if (trade.side === 'long') longCount++;
-      else shortCount++;
-      
-      if (pnl > 0) profitCount++;
-      else if (pnl < 0) lossCount++;
-      totalProfit += pnl;
     }
     
-    if (profitCount > 0 || lossCount > 0) {
-      const winRate = profitCount / (profitCount + lossCount) * 100;
-      const longRate = longCount / (longCount + shortCount) * 100;
-      dataPrompt += `统计（最近${Math.min(10, tradeHistory.length)}笔）:
-- 胜率: ${winRate.toFixed(1)}% (${profitCount}胜${lossCount}负)
-- 做多比例: ${longRate.toFixed(0)}% (${longCount}多/${shortCount}空)
-- 净盈亏: ${totalProfit >= 0 ? '+' : ''}${totalProfit.toFixed(2)} USDT
-${longRate > 80 ? '\n** 警告：做空比例过低，请认真检查做空机会！**\n' : ''}
+    if (summary.totalCount > 0) {
+      dataPrompt += `统计（最近${summary.totalCount}笔平仓）:
+- 胜率: ${summary.winRate.toFixed(1)}% (${summary.profitCount}胜${summary.lossCount}负)
+- 做多比例: ${summary.longRate.toFixed(0)}% (${summary.longCount}多/${summary.shortCount}空)
+- 净盈亏: ${summary.totalProfit >= 0 ? '+' : ''}${summary.totalProfit.toFixed(2)} USDT
+${summary.longRate > 80 ? '\n** 警告：做空比例过低，请认真检查做空机会！**\n' : ''}
 `;
     }
   }
@@ -564,12 +553,9 @@ function generateAiAutonomousPromptForCycle(data: {
       let lastCloseTime: Date | null = null;
       
       if (tradeHistory && tradeHistory.length > 0) {
-        // 找到最近的平仓记录
-        for (const trade of tradeHistory) {
-          if (trade.type === 'close') {
-            lastCloseTime = new Date(trade.timestamp);
-            break; // tradeHistory 已经按时间倒序排列
-          }
+        const latestCloseTrade = getMostRecentCloseTrade(tradeHistory);
+        if (latestCloseTrade) {
+          lastCloseTime = new Date(latestCloseTrade.timestamp);
         }
       }
       
@@ -682,54 +668,46 @@ ${newsContent}`;
     }
   }
 
-  // 输出历史交易记录（如果有）
   if (tradeHistory && tradeHistory.length > 0) {
+    const recentTrades = getRecentTrades(tradeHistory, 10);
+    const recentClosedTrades = getRecentClosedTrades(tradeHistory, 10);
+    const summary = summarizeClosedTrades(recentClosedTrades);
+
     prompt += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-【最近交易记录】（最近10笔）
+【最近交易记录】（最近10条）
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 `;
-    let profitCount = 0;
-    let lossCount = 0;
-    let totalProfit = 0;
     
-    for (const trade of tradeHistory.slice(0, 10)) {
+    for (const trade of recentTrades) {
       const tradeTime = formatChinaTime(trade.timestamp);
       const pnl = trade?.pnl ?? 0;
       
-      // 计算收益率（如果有pnl和价格信息）
       let pnlPercent = 0;
-      if (pnl !== 0 && trade.price && trade.quantity && trade.leverage) {
+      if (trade.type === 'close' && pnl !== 0 && trade.price && trade.quantity && trade.leverage) {
         const positionValue = trade.price * trade.quantity / trade.leverage;
         if (positionValue > 0) {
           pnlPercent = (pnl / positionValue) * 100;
         }
       }
       
-      prompt += `${trade.symbol}_USDT ${trade.side === 'long' ? '做多' : '做空'}:\n`;
+      prompt += `${trade.symbol}_USDT ${trade.side === 'long' ? '做多' : '做空'} ${trade.type === 'close' ? '平仓' : '开仓'}:\n`;
       prompt += `  时间: ${tradeTime}\n`;
-      prompt += `  盈亏: ${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)} USDT\n`;
-      if (pnlPercent !== 0) {
-        prompt += `  收益率: ${pnlPercent >= 0 ? '+' : ''}${pnlPercent.toFixed(2)}%\n`;
+      if (trade.type === 'close') {
+        prompt += `  盈亏: ${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)} USDT\n`;
+        if (pnlPercent !== 0) {
+          prompt += `  收益率: ${pnlPercent >= 0 ? '+' : ''}${pnlPercent.toFixed(2)}%\n`;
+        }
       }
       prompt += `\n`;
-      
-      if (pnl > 0) {
-        profitCount++;
-      } else if (pnl < 0) {
-        lossCount++;
-      }
-      totalProfit += pnl;
     }
     
-    // 添加统计信息
-    if (profitCount > 0 || lossCount > 0) {
-      const winRate = profitCount / (profitCount + lossCount) * 100;
-      prompt += `最近10笔交易统计:\n`;
-      prompt += `  胜率: ${winRate.toFixed(1)}%\n`;
-      prompt += `  盈利交易: ${profitCount}笔\n`;
-      prompt += `  亏损交易: ${lossCount}笔\n`;
-      prompt += `  净盈亏: ${totalProfit >= 0 ? '+' : ''}${totalProfit.toFixed(2)} USDT\n\n`;
+    if (summary.totalCount > 0) {
+      prompt += `最近${summary.totalCount}笔平仓交易统计:\n`;
+      prompt += `  胜率: ${summary.winRate.toFixed(1)}%\n`;
+      prompt += `  盈利交易: ${summary.profitCount}笔\n`;
+      prompt += `  亏损交易: ${summary.lossCount}笔\n`;
+      prompt += `  净盈亏: ${summary.totalProfit >= 0 ? '+' : ''}${summary.totalProfit.toFixed(2)} USDT\n\n`;
     }
   }
 
@@ -1187,15 +1165,15 @@ ${isCodeLevelProtectionEnabled ? (allowAiOverride ? `│                        
   
   // 历史成交记录（最近10条）
   if (tradeHistory && tradeHistory.length > 0) {
-    prompt += `\n最近交易历史（最近10笔交易，最旧 → 最新）：\n`;
-    prompt += `重要说明：以下仅为最近10条交易的统计，用于分析近期策略表现，不代表账户总盈亏。\n`;
+    const recentTrades = getRecentTrades(tradeHistory, 10);
+    const recentClosedTrades = getRecentClosedTrades(tradeHistory, 10);
+    const summary = summarizeClosedTrades(recentClosedTrades);
+
+    prompt += `\n最近交易历史（最近10条记录，最旧 → 最新）：\n`;
+    prompt += `重要说明：展示的是最近10条交易记录；胜率统计仅基于最近已平仓交易，不包含开仓记录，不代表账户总盈亏。\n`;
     prompt += `使用此信息评估近期交易质量、识别策略问题、优化决策方向。\n\n`;
     
-    let totalProfit = 0;
-    let profitCount = 0;
-    let lossCount = 0;
-    
-    for (const trade of tradeHistory) {
+    for (const trade of recentTrades) {
       const tradeTime = formatChinaTime(trade.timestamp);
       
       prompt += `交易: ${trade.symbol} ${trade.type === 'open' ? '开仓' : '平仓'} ${trade.side.toUpperCase()}\n`;
@@ -1203,16 +1181,9 @@ ${isCodeLevelProtectionEnabled ? (allowAiOverride ? `│                        
       prompt += `  价格: ${trade.price.toFixed(2)}, 数量: ${trade.quantity.toFixed(4)}, 杠杆: ${trade.leverage}x\n`;
       prompt += `  手续费: ${trade.fee.toFixed(4)} USDT\n`;
       
-      // 对于平仓交易，总是显示盈亏金额
       if (trade.type === 'close') {
         if (trade.pnl !== undefined && trade.pnl !== null) {
           prompt += `  盈亏: ${trade.pnl >= 0 ? '+' : ''}${trade.pnl.toFixed(2)} USDT\n`;
-          totalProfit += trade.pnl;
-          if (trade.pnl > 0) {
-            profitCount++;
-          } else if (trade.pnl < 0) {
-            lossCount++;
-          }
         } else {
           prompt += `  盈亏: 暂无数据\n`;
         }
@@ -1221,14 +1192,13 @@ ${isCodeLevelProtectionEnabled ? (allowAiOverride ? `│                        
       prompt += `\n`;
     }
     
-    if (profitCount > 0 || lossCount > 0) {
-      const winRate = profitCount / (profitCount + lossCount) * 100;
-      prompt += `最近10条交易统计（仅供参考）:\n`;
-      prompt += `  - 胜率: ${winRate.toFixed(1)}%\n`;
-      prompt += `  - 盈利交易: ${profitCount}笔\n`;
-      prompt += `  - 亏损交易: ${lossCount}笔\n`;
-      prompt += `  - 最近10条净盈亏: ${totalProfit >= 0 ? '+' : ''}${totalProfit.toFixed(2)} USDT\n`;
-      prompt += `\n注意：此数值仅为最近10笔交易统计，用于评估近期策略有效性，不是账户总盈亏。\n`;
+    if (summary.totalCount > 0) {
+      prompt += `最近${summary.totalCount}笔平仓交易统计（仅供参考）:\n`;
+      prompt += `  - 胜率: ${summary.winRate.toFixed(1)}%\n`;
+      prompt += `  - 盈利交易: ${summary.profitCount}笔\n`;
+      prompt += `  - 亏损交易: ${summary.lossCount}笔\n`;
+      prompt += `  - 最近${summary.totalCount}笔平仓净盈亏: ${summary.totalProfit >= 0 ? '+' : ''}${summary.totalProfit.toFixed(2)} USDT\n`;
+      prompt += `\n注意：此数值仅为最近平仓交易统计，用于评估近期策略有效性，不是账户总盈亏。\n`;
       prompt += `账户真实盈亏请参考上方"当前账户状态"中的收益率和总资产变化。\n\n`;
     }
   }

@@ -230,7 +230,17 @@ export function createApiRoutes() {
       logger.info(`查询到 ${result.rows.length} 条交易记录`);
       
       if (!result.rows || result.rows.length === 0) {
-        return c.json({ trades: [] });
+        return c.json({
+          trades: [],
+          summary: {
+            recentRecordsCount: 0,
+            recentClosedCount: 0,
+            winRate: 0,
+            winTrades: 0,
+            lossTrades: 0,
+            totalPnl: 0,
+          },
+        });
       }
       
       // 转换数据库格式到前端需要的格式
@@ -250,8 +260,27 @@ export function createApiRoutes() {
           status: row.status,
         };
       });
+
+      const recentClosedTrades = trades
+        .filter((trade: any) => trade.type === "close" && trade.pnl !== null)
+        .slice(0, 10);
+      const winTrades = recentClosedTrades.filter((trade: any) => (trade.pnl ?? 0) > 0).length;
+      const lossTrades = recentClosedTrades.filter((trade: any) => (trade.pnl ?? 0) < 0).length;
+      const closedCount = winTrades + lossTrades;
+      const totalPnl = recentClosedTrades.reduce((sum: number, trade: any) => sum + (trade.pnl ?? 0), 0);
+      const winRate = closedCount > 0 ? (winTrades / closedCount) * 100 : 0;
       
-      return c.json({ trades });
+      return c.json({
+        trades,
+        summary: {
+          recentRecordsCount: trades.length,
+          recentClosedCount: closedCount,
+          winRate,
+          winTrades,
+          lossTrades,
+          totalPnl,
+        },
+      });
     } catch (error: any) {
       logger.error("获取历史仓位失败:", error);
       return c.json({ error: error.message }, 500);

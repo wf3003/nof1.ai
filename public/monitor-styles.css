@@ -889,6 +889,27 @@ body {
     overflow: hidden;
 }
 
+.trades-summary {
+    margin: -0.5rem 0 1rem;
+    padding: 0.75rem 1rem;
+    border: 1px solid var(--border-color);
+    border-radius: 0.75rem;
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    line-height: 1.5;
+}
+
+.trades-summary .positive {
+    color: var(--accent-green);
+    font-weight: 600;
+}
+
+.trades-summary .negative {
+    color: var(--accent-red);
+    font-weight: 600;
+}
+
 .section-header {
     color: var(--text-primary);
     font-size: 1rem;

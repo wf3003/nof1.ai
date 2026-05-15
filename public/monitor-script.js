@@ -300,6 +300,7 @@ class TradingMonitor {
 
             const tradesBody = document.getElementById('trades-body');
             const countEl = document.getElementById('tradesCount');
+            const summaryEl = document.getElementById('trades-summary');
             
             if (!data.trades || data.trades.length === 0) {
                 if (tradesBody) {
@@ -308,11 +309,30 @@ class TradingMonitor {
                 if (countEl) {
                     countEl.textContent = '';
                 }
+                if (summaryEl) {
+                    summaryEl.textContent = '暂无最近交易记录与平仓统计';
+                }
                 return;
             }
             
             if (countEl) {
-                countEl.textContent = `(${data.trades.length})`;
+                countEl.textContent = `(最近${data.summary?.recentRecordsCount ?? data.trades.length}条记录)`;
+            }
+
+            if (summaryEl) {
+                const summary = data.summary;
+                if (summary && summary.recentClosedCount > 0) {
+                    const pnlClass = summary.totalPnl >= 0 ? 'positive' : 'negative';
+                    summaryEl.innerHTML = `
+                        最近 <strong>${summary.recentRecordsCount}</strong> 条是交易记录展示；
+                        胜率仅基于最近 <strong>${summary.recentClosedCount}</strong> 笔平仓计算：
+                        <strong>${summary.winRate.toFixed(1)}%</strong>
+                        （${summary.winTrades} 胜 / ${summary.lossTrades} 负），
+                        净盈亏 <span class="${pnlClass}">${summary.totalPnl >= 0 ? '+' : ''}${summary.totalPnl.toFixed(2)} USDT</span>
+                    `;
+                } else {
+                    summaryEl.textContent = `最近 ${data.summary?.recentRecordsCount ?? data.trades.length} 条仅包含交易记录，暂无可用于胜率统计的平仓样本`;
+                }
             }
             
             if (tradesBody) {
