@@ -324,6 +324,7 @@ nof1.ai/
 |------|------|--------|---------|
 | `PORT` | HTTP 服务器端口 | 3100 | 否 |
 | `TRADING_STRATEGY` | 交易策略(`ultra-short`/`swing-trend`/`conservative`/`balanced`/`aggressive`) | balanced | 否 |
+| `TRADING_SYMBOLS` | 交易币种列表 | BTC,ETH,SOL,XRP,BNB,SUI | 否 |
 | `TRADING_INTERVAL_MINUTES` | 交易循环间隔(分钟) | 20 | 否 |
 | `MAX_LEVERAGE` | 最大杠杆倍数 | 25 | 否 |
 | `MAX_POSITIONS` | 最大持仓数量 | 5 | 否 |

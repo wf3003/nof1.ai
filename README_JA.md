@@ -324,6 +324,7 @@ nof1.ai/
 | 変数 | 説明 | デフォルト値 | 必須 |
 |------|------|-------------|------|
 | `PORT` | HTTP サーバーポート | 3100 | いいえ |
+| `TRADING_SYMBOLS` | Trading symbols | BTC,ETH,SOL,XRP,BNB,SUI | No |
 | `TRADING_STRATEGY` | 取引戦略 (`ultra-short`/`swing-trend`/`conservative`/`balanced`/`aggressive`) | balanced | いいえ |
 | `TRADING_INTERVAL_MINUTES` | 取引ループ間隔(分) | 20 | いいえ |
 | `MAX_LEVERAGE` | 最大レバレッジ倍率 | 25 | いいえ |

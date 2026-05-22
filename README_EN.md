@@ -324,6 +324,7 @@ nof1.ai/
 | Variable | Description | Default | Required |
 |----------|-------------|---------|----------|
 | `PORT` | HTTP server port | 3100 | No |
+| `TRADING_SYMBOLS` | Trading symbols | BTC,ETH,SOL,XRP,BNB,SUI | No |
 | `TRADING_STRATEGY` | Trading strategy (`ultra-short`/`swing-trend`/`conservative`/`balanced`/`aggressive`) | balanced | No |
 | `TRADING_INTERVAL_MINUTES` | Trading loop interval in minutes | 20 | No |
 | `MAX_LEVERAGE` | Maximum leverage multiplier | 25 | No |

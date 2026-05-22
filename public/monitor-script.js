@@ -419,6 +419,7 @@ class TradingMonitor {
                 if (decisionContent) {
                     const decision = log.decision || log.actionsTaken || '暂无决策内容';
                     // 使用 marked 库将 markdown 转换为 HTML
+                    const cleaned = decision.replace(/\n{2,}/g, '\n');
                     const htmlContent = marked.parse(decision);
                     
                     decisionContent.innerHTML = `<div class="decision-text markdown-content">${htmlContent}</div>`;
