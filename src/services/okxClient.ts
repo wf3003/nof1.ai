@@ -314,6 +314,12 @@ export class OkxClient {
         })).reverse(); // OKX 返回倒序，需要反转
       } catch (error) {
         lastError = error;
+        // 51001 = 合约不存在，直接跳过不重试（比如测试网没有该币种K线）
+        const errStr = String(error);
+        if (errStr.includes("51001")) {
+          logger.warn(`${contract} 无K线数据（51001），跳过`);
+          return [];
+        }
         if (i < retries) {
           logger.warn(`获取 ${contract} K线数据失败，重试 ${i + 1}/${retries}...`);
           await new Promise(resolve => setTimeout(resolve, 300 * (i + 1)));
@@ -485,8 +491,9 @@ export class OkxClient {
       // 如果已经设置过，可能会报错，这是正常的
       if (error.message.includes("Position mode is already") || 
           error.message.includes("59120") || // OKX 错误码：持仓模式已存在
-          error.message.includes("59121")) { // OKX 错误码：有持仓时不能修改
-        logger.info("持仓模式已经设置，跳过");
+          error.message.includes("59121") || // OKX 错误码：有持仓时不能修改
+          error.message.includes("59000")) { // OKX 错误码：有持仓时无法更改，视为已设置
+        logger.info("持仓模式已经设置或无法更改（已有持仓），跳过");
         this.positionModeSet = true;
       } else {
         logger.warn(`设置持仓模式失败:`, error.message);
@@ -533,42 +540,47 @@ export class OkxClient {
         ordType = "limit";
         px = params.price.toString();
       }
-      
-      // 构建订单参数
-      const order: any = {
-        instId,
-        tdMode: "cross", // 全仓模式
-        side,
-        posSide,
-        ordType,
-        sz: Math.abs(params.size).toString(),
+
+      // 下单函数：支持可选 posSide（用于 net_mode 回退）
+      const sendOrder = async (includePosSide: boolean) => {
+        const orderBody: any = {
+          instId,
+          tdMode: "cross",
+          side,
+          ordType,
+          sz: Math.abs(params.size).toString(),
+        };
+        if (includePosSide) {
+          orderBody.posSide = posSide;
+        }
+        if (ordType === "limit") {
+          orderBody.px = px;
+        }
+        if (params.reduceOnly) {
+          orderBody.reduceOnly = true;
+        }
+        
+        logger.info(`OKX 下单请求 ${includePosSide ? "(含posSide)" : "(无posSide回退)"}:`, {
+          contract: params.contract,
+          instId,
+          size: params.size,
+          reduceOnly: params.reduceOnly,
+          orderParams: orderBody,
+        });
+
+        const data = await this.request("POST", "/api/v5/trade/order", undefined, orderBody);
+        if (!data || data.length === 0) throw new Error("No order response");
+        return data[0];
       };
       
-      if (ordType === "limit") {
-        order.px = px;
+      // 首次尝试：带 posSide（long_short_mode）
+      let result = await sendOrder(true);
+      
+      // 如果失败且错误码是 51169，尝试不带 posSide（net_mode 回退）
+      if (result.sCode !== "0" && result.sCode === "51169" && params.reduceOnly) {
+        logger.warn(`posSide 模式失败 (${result.sMsg})，尝试 net_mode 回退...`);
+        result = await sendOrder(false);
       }
-      
-      // 平仓标识
-      if (params.reduceOnly) {
-        order.reduceOnly = true;
-      }
-      
-      logger.info(`OKX 下单请求:`, {
-        contract: params.contract,
-        instId,
-        size: params.size,
-        price: params.price,
-        reduceOnly: params.reduceOnly,
-        orderParams: order,
-      });
-      
-      const data = await this.request("POST", "/api/v5/trade/order", undefined, order);
-      
-      if (!data || data.length === 0) {
-        throw new Error("No order response");
-      }
-      
-      const result = data[0];
       
       logger.info(`OKX 下单响应:`, {
         ordId: result.ordId,

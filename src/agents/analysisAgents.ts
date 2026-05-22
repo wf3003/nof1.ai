@@ -35,6 +35,16 @@ export function createTechnicalAnalystAgent(marketDataContext?: any) {
   const openai = createOpenAI({
     apiKey: process.env.OPENAI_API_KEY || "",
     baseURL: process.env.OPENAI_BASE_URL || "https://openrouter.ai/api/v1",
+    fetch: async (url, options) => {
+      if (options?.body) {
+        try {
+          const body = JSON.parse(options.body as string);
+          body.thinking = { type: "disabled" };
+          options.body = JSON.stringify(body);
+        } catch {}
+      }
+      return fetch(url, options as any);
+    },
   });
 
   // 构建包含市场数据的指令
@@ -81,6 +91,16 @@ export function createTrendAnalystAgent(marketDataContext?: any) {
   const openai = createOpenAI({
     apiKey: process.env.OPENAI_API_KEY || "",
     baseURL: process.env.OPENAI_BASE_URL || "https://openrouter.ai/api/v1",
+    fetch: async (url, options) => {
+      if (options?.body) {
+        try {
+          const body = JSON.parse(options.body as string);
+          body.thinking = { type: "disabled" };
+          options.body = JSON.stringify(body);
+        } catch {}
+      }
+      return fetch(url, options as any);
+    },
   });
 
   // 构建包含市场数据的指令
@@ -127,6 +147,16 @@ export function createRiskAssessorAgent(marketDataContext?: any) {
   const openai = createOpenAI({
     apiKey: process.env.OPENAI_API_KEY || "",
     baseURL: process.env.OPENAI_BASE_URL || "https://openrouter.ai/api/v1",
+    fetch: async (url, options) => {
+      if (options?.body) {
+        try {
+          const body = JSON.parse(options.body as string);
+          body.thinking = { type: "disabled" };
+          options.body = JSON.stringify(body);
+        } catch {}
+      }
+      return fetch(url, options as any);
+    },
   });
 
   // 构建包含市场数据的指令

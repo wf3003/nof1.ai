@@ -31,8 +31,9 @@
  * - ai-autonomous: AI自主策略，完全由AI主导，不提供任何策略建议
  * - multi-agent-consensus: 陪审团策略
  * - alpha-beta: Alpha Beta策略，零策略指导的AI完全自主决策
+ * - alpha-enhanced: Alpha Enhanced策略，融合crypto-trader实践：分级止损+波动率自适应+双重防护
  */
-export type TradingStrategy = "conservative" | "balanced" | "aggressive" | "aggressive-team" | "ultra-short" | "swing-trend" | "medium-long" | "rebate-farming" | "ai-autonomous" | "multi-agent-consensus" | "alpha-beta";
+export type TradingStrategy = "conservative" | "balanced" | "aggressive" | "aggressive-team" | "ultra-short" | "swing-trend" | "medium-long" | "rebate-farming" | "ai-autonomous" | "multi-agent-consensus" | "alpha-beta" | "alpha-enhanced";
 
 /**
  * 策略提示词生成上下文

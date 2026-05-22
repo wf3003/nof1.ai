@@ -365,6 +365,7 @@ body {
 .decision-content {
     color: var(--text-secondary);
     line-height: 1.8;
+    white-space: pre-wrap;
 }
 
 .decision-text {
@@ -378,7 +379,7 @@ body {
 
 /* Markdown 内容样式 */
 .markdown-content {
-    white-space: normal;
+    white-space: pre-line;
 }
 
 .markdown-content h1,

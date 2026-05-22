@@ -128,7 +128,7 @@ export function createApiRoutes() {
       
       // 过滤并格式化持仓
       const positions = gatePositions
-        .filter((p: any) => Number.parseInt(p.size || "0") !== 0)
+        .filter((p: any) => Number.parseFloat(p.size || "0") !== 0)
         .map((p: any) => {
           const size = Number.parseInt(p.size || "0");
           const symbol = p.contract.replace("_USDT", "");
@@ -441,6 +441,69 @@ export function createApiRoutes() {
   });
 
   /**
+   * 获取 K 线数据（供 Python bridge 调用）
+   */
+  app.get("/api/candles", async (c) => {
+    try {
+      const symbol = c.req.query("symbol") || "BTC";
+      const interval = c.req.query("interval") || "30m";
+      const limit = Number.parseInt(c.req.query("limit") || "100");
+      
+      const exchangeClient = createExchangeClient();
+      const contract = `${symbol}_USDT`;
+      const candles = await exchangeClient.getFuturesCandles(contract, interval, limit);
+      
+      return c.json({ success: true, data: candles });
+    } catch (error: any) {
+      logger.error("获取K线失败:", error);
+      return c.json({ success: false, message: error.message }, 500);
+    }
+  });
+
+  /**
+   * 开仓接口（供 Python bridge 调用）
+   */
+  app.post("/api/open-position", async (c) => {
+    try {
+      const body = await c.req.json();
+      const { symbol, side, leverage, amountUsdt } = body;
+      
+      if (!symbol || !side || !leverage || !amountUsdt) {
+        return c.json({ success: false, message: "缺少参数" }, 400);
+      }
+      
+      const exchangeClient = createExchangeClient();
+      const contract = `${symbol}_USDT`;
+      
+      const ticker = await exchangeClient.getFuturesTicker(contract);
+      const price = Number.parseFloat(ticker.markPrice || ticker.last || "0");
+      if (!price) return c.json({ success: false, message: "无法获取行情" }, 500);
+      
+      const quantoMultiplier = await getQuantoMultiplier(contract);
+      const quantity = Math.floor((amountUsdt * leverage) / (price * quantoMultiplier));
+      
+      if (quantity <= 0) {
+        return c.json({ success: false, message: "合约数量为0" }, 400);
+      }
+      
+      const size = side === "long" ? quantity : -quantity;
+      
+      try { await exchangeClient.setLeverage(contract, leverage); } catch {}
+      
+      const order = await exchangeClient.placeOrder({ contract, size, price: 0 });
+      
+      return c.json({
+        success: true,
+        message: `开仓 ${symbol} ${side}`,
+        data: { symbol, side, leverage, quantity, price, orderId: order.id },
+      });
+    } catch (error: any) {
+      logger.error("开仓失败:", error);
+      return c.json({ success: false, message: error.message }, 500);
+    }
+  });
+
+  /**
    * 手动平仓接口 - 需要验证密码
    */
   app.post("/api/close-position", async (c) => {
@@ -479,7 +542,7 @@ export function createApiRoutes() {
       // 获取当前持仓
       const allPositions = await exchangeClient.getPositions();
       const gatePosition = allPositions.find((p: any) => 
-        p.contract === contract && Number.parseInt(p.size || "0") !== 0
+        p.contract === contract && Number.parseFloat(p.size || "0") !== 0
       );
       
       if (!gatePosition) {

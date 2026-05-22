@@ -74,7 +74,7 @@ const logger = createLogger({
  */
 export function getTradingStrategy(): TradingStrategy {
   const strategy = process.env.TRADING_STRATEGY || "alpha-beta";
-  if (strategy === "conservative" || strategy === "balanced" || strategy === "aggressive" || strategy === "aggressive-team" || strategy === "ultra-short" || strategy === "swing-trend" || strategy === "medium-long" || strategy === "rebate-farming" || strategy === "ai-autonomous" || strategy === "multi-agent-consensus" || strategy === "alpha-beta") {
+  if (strategy === "conservative" || strategy === "balanced" || strategy === "aggressive" || strategy === "aggressive-team" || strategy === "ultra-short" || strategy === "swing-trend" || strategy === "medium-long" || strategy === "rebate-farming" || strategy === "ai-autonomous" || strategy === "multi-agent-consensus" || strategy === "alpha-beta" || strategy === "alpha-enhanced") {
     return strategy;
   }
   logger.warn(`未知的交易策略: ${strategy}，使用默认策略: balanced`);
@@ -1237,7 +1237,18 @@ ${isCodeLevelProtectionEnabled ? (allowAiOverride ? `│                        
 function generateInstructions(strategy: TradingStrategy, intervalMinutes: number): string {
   const params = getStrategyParams(strategy);
   
-  // 如果是AI自主策略或Alpha Beta策略，返回极简的系统提示词
+  // Alpha Enhanced 信号模式：极简提示词，只输出JSON
+  if (strategy === "alpha-enhanced") {
+    return `你是加密货币交易信号生成器。你必须只输出一行JSON，不含任何其他文字。
+
+输出格式：{"action":"buy|sell|hold","symbol":"BTC","leverage":3,"amountPercent":15,"reason":"短线理由≤25字","confidence":0.65}
+
+规则：
+- 每个周期只选1个最强信号
+- confidence<0.55时不交易(action=hold)
+- 只分析数据直接输出JSON，不要写"首先让我"之类的引导语`;
+  }
+
   if (strategy === "ai-autonomous" || strategy === "alpha-beta") {
     const strategyName = strategy === "alpha-beta" ? "Alpha Beta" : "AI自主";
     const strategyDesc = strategy === "alpha-beta" 
@@ -1871,6 +1882,17 @@ export async function createTradingAgent(intervalMinutes: number = 5, marketData
   const openai = createOpenAI({
     apiKey: process.env.OPENAI_API_KEY || "",
     baseURL: process.env.OPENAI_BASE_URL || "https://openrouter.ai/api/v1",
+    fetch: async (url, options) => {
+      // DeepSeek V4: 注入 thinking: disabled 以禁用思考模式
+      if (options?.body) {
+        try {
+          const body = JSON.parse(options.body as string);
+          body.thinking = { type: "disabled" };
+          options.body = JSON.stringify(body);
+        } catch {}
+      }
+      return fetch(url, options as any);
+    },
   });
 
   const memory = new Memory({

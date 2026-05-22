@@ -187,8 +187,11 @@ export const openPositionTool = createTool({
           };
         }
         
-        // 如果方向相同，允许加仓（但需要注意总持仓限制）
-        logger.info(`${symbol} 已有${side === "long" ? "多" : "空"}单持仓，允许加仓`);
+        // 方向相同则禁止重复开仓（避免AI在同币种上连续开多个单）
+        return {
+          success: false,
+          message: `拒绝开仓 ${symbol}：已有${side === "long" ? "多" : "空"}单持仓。请先平掉现有持仓后再开新仓。`,
+        };
       }
       
       // 3. 🔒 检查该币种是否在同一周期内刚平仓（防止平仓后立即重新开仓）

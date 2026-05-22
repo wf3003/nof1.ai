@@ -1614,15 +1614,65 @@ async function executeTradingDecision() {
     try {
       // 设置足够大的 maxOutputTokens 以避免输出被截断
       // DeepSeek API 限制: max_tokens 范围为 [1, 8192]
+      const strategy = getTradingStrategy();
+      const isSignalMode = strategy === "alpha-enhanced";
+      let decisionText = "";
+
+      // ─── 信号模式：直接用 LLM 补全，绕过 Agent 框架 ───
+      if (isSignalMode) {
+        // 读取上次决策，避免 AI 重复长篇分析
+        const lastRow = (await dbClient.execute("SELECT decision FROM agent_decisions ORDER BY id DESC LIMIT 1")).rows[0];
+        const lastDecision = lastRow ? (lastRow.decision as string).substring(0,200) : "";
+        const { createOpenAI } = await import("@ai-sdk/openai");
+        const ai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY || "", baseURL: process.env.OPENAI_BASE_URL, fetch: async (url: any, options: any) => { if (options?.body) { try { const b = JSON.parse(options.body as string); b.thinking = { type: "disabled" }; options.body = JSON.stringify(b); } catch {} } return fetch(url, options as any); } });
+        const model = ai.chat(process.env.AI_MODEL_NAME || "deepseek-v4-flash");
+        const result = await (await import("ai")).generateText({
+          model,
+          messages: [
+            { role: "system", content: "你是加密货币交易信号生成器。先逐个分析每个币种的趋势和信号（每个币1-2行），然后按信号强度排名并输出TOP-1的JSON。\n\nJSON: {\"action\":\"buy|sell|hold\",\"symbol\":\"BTC\",\"leverage\":12,\"amountPercent\":10,\"reason\":\"≤25字\",\"confidence\":0.45}\n\n杠杆范围: 12-25x。超卖反弹规则：如果RSI<20且价格接近EMA20，可轻仓试探buy。RSI<15时confidence可低至0.40。BNB RSI>80时考虑做空。允许每轮都hold。信心<0.40时报hold。上次结论相同可简短。" },
+            { role: "user", content: `${prompt}\n\n[上周期结论] ${lastDecision || "无"}\n如果市场没明显变化，可以简短总结+hold，不要重复长篇分析。` },
+          ],
+          maxOutputTokens: 2048,
+          temperature: 0.3,
+        });
+        decisionText = result.text.trim();
+        // Try to parse JSON signal and execute
+        try {
+          const signalMatch = decisionText.match(/\{[\s\S]*"action"[\s\S]*\}/);
+          if (signalMatch) {
+            const signal = JSON.parse(signalMatch[0]);
+            logger.info(`🔍 信号: ${JSON.stringify(signal)}`);
+            if ((signal.action === "buy" || signal.action === "sell") && signal.confidence >= 0.40 && signal.symbol) {
+              const execModule = await import("../tools/trading/index.js");
+              const execTool = (execModule as any).openPositionTool;
+              const side: "long" | "short" = signal.action === "buy" ? "long" : "short";
+              const strategyParams = getStrategyParams(strategy);
+              const lev = Math.max(strategyParams.leverageMin, Math.min(signal.leverage || strategyParams.leverageMin, strategyParams.leverageMax));
+              const pct = Math.max(5, Math.min(signal.amountPercent || 15, 30));
+              const amount = (accountInfo.availableBalance * pct) / 100;
+              if (amount > 10 && execTool?.execute) {
+                const r: any = await execTool.execute({ symbol: signal.symbol, side, leverage: lev, amountUsdt: amount });
+                logger.info(`🚀 执行结果: ${r.success ? '✅' : '❌'} ${r.message || ''}`);
+              }
+            }
+          }
+        } catch (e: any) { logger.error(`信号解析: ${e.message}`); }
+        logger.info(`📤 信号输出: ${decisionText}`);
+        // 跳到保存决策记录
+        await dbClient.execute({ sql: `INSERT INTO agent_decisions (timestamp, iteration, market_analysis, decision, actions_taken, account_value, positions_count) VALUES (?, ?, ?, ?, ?, ?, ?)`, args: [getChinaTimeISO(), iterationCount, JSON.stringify(marketData), decisionText, "[]", accountInfo.totalBalance, positions.length] });
+        return; // 信号模式完成，跳过后续处理
+      }
+
       const response = await agent.generateText(prompt, {
         maxOutputTokens: 8192,
         maxSteps: 20,
         temperature: 0.4,
       });
       
+       
       // 从响应中提取AI的完整回复，不进行任何切分
-      let decisionText = "";
-      
+      decisionText = "";
+       
       // 添加调试日志，查看响应的原始结构
       logger.debug(`响应类型: ${typeof response}`);
       if (response && typeof response === 'object') {
@@ -1697,7 +1747,7 @@ async function executeTradingDecision() {
       logger.info("=".repeat(80));
       logger.info(decisionText || "无决策输出");
       logger.info("=".repeat(80) + "\n");
-      
+
       // 保存决策记录
       await dbClient.execute({
         sql: `INSERT INTO agent_decisions 
