@@ -548,7 +548,7 @@ export class OkxClient {
           tdMode: "cross",
           side,
           ordType,
-          sz: Math.abs(params.size).toString(),
+          sz: params.reduceOnly ? "999999" : Math.abs(params.size).toString(),
         };
         if (includePosSide) {
           orderBody.posSide = posSide;
