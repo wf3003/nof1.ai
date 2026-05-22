@@ -1652,7 +1652,9 @@ async function executeTradingDecision() {
               const amount = (accountInfo.availableBalance * pct) / 100;
               if (amount > 10 && execTool?.execute) {
                 const r: any = await execTool.execute({ symbol: signal.symbol, side, leverage: lev, amountUsdt: amount });
-                logger.info(`🚀 执行结果: ${r.success ? '✅' : '❌'} ${r.message || ''}`);
+                const resultMsg = r?.success ? `✅ ${r.message || '开仓成功'}` : `❌ ${r?.message || '开仓失败'}`;
+                logger.info(`🚀 执行结果: ${resultMsg}`);
+                decisionText += `\n\n## 执行结果\n${resultMsg}`;
               }
             }
           }

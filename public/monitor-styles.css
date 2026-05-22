@@ -368,10 +368,20 @@ body {
     white-space: pre-wrap;
 }
 
+.decision-text.markdown-content * {
+    margin-top: 0 !important;
+    margin-bottom: 0 !important;
+    line-height: 1.4;
+}
+
+.decision-text.markdown-content ol,
+.decision-text.markdown-content ul {
+    padding-left: 1.5em !important;
+}
+
 .decision-text {
     font-size: 0.85rem;
-    white-space: pre-wrap;
-    word-wrap: break-word;
+    white-space: pre-line;
     word-break: break-word;
     overflow-wrap: break-word;
     max-width: 100%;
