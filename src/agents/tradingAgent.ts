@@ -189,6 +189,77 @@ function formatNewsContent(newsData: Record<string, any>): string {
 }
 
 /**
+ * 生成Alpha Enhanced策略的简洁提示词
+ * 规则在system prompt中，此处只提供数据，要求直接输出JSON
+ */
+function generateAlphaEnhancedPromptForCycle(data: {
+  minutesElapsed: number;
+  iteration: number;
+  intervalMinutes: number;
+  marketData: any;
+  newsData?: Record<string, any>;
+  accountInfo: any;
+  positions: any[];
+  tradeHistory?: any[];
+  recentDecisions?: any[];
+}): string {
+  const { minutesElapsed, iteration, intervalMinutes, marketData, newsData, accountInfo, positions, tradeHistory, recentDecisions } = data;
+  const currentTime = formatChinaTime();
+  
+  let prompt = `周期 #${iteration} | ${currentTime} | 运行${minutesElapsed}分钟
+
+账户: ${(accountInfo?.totalBalance ?? 0).toFixed(2)} USDT | 持仓${positions?.length ?? 0}个
+`;
+
+  // 持仓摘要
+  if (positions && positions.length > 0) {
+    prompt += `\n当前持仓:\n`;
+    for (const pos of positions) {
+      const pnlPercent = pos.unrealized_pnl && pos.entry_price 
+        ? ((pos.current_price - pos.entry_price) / pos.entry_price * 100 * (pos.leverage || 1))
+        : 0;
+      prompt += `  ${pos.symbol} ${pos.side} x${pos.leverage} 入场${pos.entry_price} 现价${pos.current_price} PnL:${pnlPercent >= 0 ? '+' : ''}${pnlPercent.toFixed(1)}%\n`;
+    }
+  }
+
+  // 市场数据（精简版：只给当前关键指标）
+  if (marketData) {
+    prompt += `\n市场数据:\n`;
+    for (const symbol of RISK_PARAMS.TRADING_SYMBOLS) {
+      const data = marketData[symbol];
+      if (!data) continue;
+      const timeframe1h = data.timeframes?.["1h"];
+      prompt += `  ${symbol}: 现价${data.currentPrice ?? data.price ?? 'N/A'}`;
+      prompt += ` | 1h RSI7=${timeframe1h?.rsi7?.toFixed?.(1) ?? 'N/A'} RSI14=${timeframe1h?.rsi14?.toFixed?.(1) ?? 'N/A'}`;
+      prompt += ` | 1h MACD=${timeframe1h?.macd?.toFixed?.(2) ?? 'N/A'}`;
+      prompt += ` | 资金费率=${data.fundingRate ?? 'N/A'}`;
+      prompt += `\n`;
+    }
+  }
+
+  // 最近交易提示
+  if (tradeHistory && tradeHistory.length > 0) {
+    const recentPnL = tradeHistory
+      .filter((t: any) => t.pnl != null)
+      .reduce((sum: number, t: any) => sum + (t.pnl || 0), 0);
+    prompt += `\n最近交易净盈亏: ${recentPnL >= 0 ? '+' : ''}${recentPnL.toFixed(2)} USDT\n`;
+  }
+
+  // 最近3条历史决策（供复盘参考）
+  if (recentDecisions && recentDecisions.length > 0) {
+    prompt += `\n近期决策回顾:\n`;
+    const recent = recentDecisions.slice(-12);
+    for (const d of recent) {
+      const decText = (d.decision || "").substring(0, 120).replace(/\n/g, " ");
+      prompt += `  [${d.timestamp || ""}] ${decText}\n`;
+    }
+  }
+
+  prompt += `\n直接输出JSON决策（不要分析文字）:`;
+  return prompt;
+}
+
+/**
  * 生成Alpha Beta策略的交易提示词
  * 结合策略规则（来自alphaBeta.ts）和周期数据
  */
@@ -849,6 +920,11 @@ export function generateTradingPrompt(data: {
     return generateAiAutonomousPromptForCycle(data);
   }
   
+  // 如果是Alpha Enhanced策略，使用简洁数据提示词（规则在system prompt中）
+  if (strategy === "alpha-enhanced") {
+    return generateAlphaEnhancedPromptForCycle(data);
+  }
+
   // 如果是Alpha Beta策略，结合策略规则和周期数据
   if (strategy === "alpha-beta") {
     return generateAlphaBetaPromptForCycle(data);
@@ -1243,10 +1319,17 @@ function generateInstructions(strategy: TradingStrategy, intervalMinutes: number
 
 输出格式：{"action":"buy|sell|hold","symbol":"BTC","leverage":3,"amountPercent":15,"reason":"短线理由≤25字","confidence":0.65}
 
+交易信号识别规则：
+- 做多(buy)：1h RSI14<35且MACD负值收窄（柱状图缩小），或价格突破EMA20且多时间框架共振向上
+- 做空(sell)：1h RSI14>65且MACD正值收窄，或价格跌破EMA20且多时间框架共振向下
+- 观望(hold)：无明确信号或方向混乱时
+
 规则：
 - 每个周期只选1个最强信号
-- confidence<0.55时不交易(action=hold)
-- 只分析数据直接输出JSON，不要写"首先让我"之类的引导语`;
+- confidence<0.40时不交易(action=hold)
+- confidence评估标准：信号明确+时间框架一致=0.7+；有信号但不够强=0.5-0.6；弱信号/勉强=0.35-0.45
+- 只分析数据直接输出JSON，不要写"首先让我"之类的引导语
+- 严禁输出Markdown、标题、分析段落，只输出一行纯JSON`;
   }
 
   if (strategy === "ai-autonomous" || strategy === "alpha-beta") {

@@ -148,7 +148,10 @@ export class OkxClient {
       
       // 记录详细的请求和响应信息（仅在出错时）
       if (data.code !== "0") {
-        logger.error(`OKX API 错误响应: ${method} ${endpoint}`, {
+        // 已知非致命错误码（持仓模式已存在、有持仓无法切换等），降级为 WARN
+        const nonFatalCodes = ["59000", "59120", "59121"];
+        const logLevel = nonFatalCodes.includes(data.code) ? "warn" : "error";
+        logger[logLevel](`OKX API 响应: ${method} ${endpoint}`, {
           requestBody: bodyStr ? JSON.parse(bodyStr) : undefined,
           responseCode: data.code,
           responseMsg: data.msg,

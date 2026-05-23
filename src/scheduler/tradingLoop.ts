@@ -1626,21 +1626,52 @@ async function executeTradingDecision() {
         const { createOpenAI } = await import("@ai-sdk/openai");
         const ai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY || "", baseURL: process.env.OPENAI_BASE_URL, fetch: async (url: any, options: any) => { if (options?.body) { try { const b = JSON.parse(options.body as string); b.thinking = { type: "disabled" }; options.body = JSON.stringify(b); } catch {} } return fetch(url, options as any); } });
         const model = ai.chat(process.env.AI_MODEL_NAME || "deepseek-v4-flash");
+        const symbolCount = SYMBOLS.length;
+        const symbolList = SYMBOLS.join("、");
+        const dynMaxTokens = Math.min(8192, 300 + symbolCount * 150);
         const result = await (await import("ai")).generateText({
           model,
           messages: [
-            { role: "system", content: "你是加密货币交易信号生成器。先逐个分析每个币种的趋势和信号（每个币1-2行），然后按信号强度排名并输出TOP-1的JSON。\n\nJSON: {\"action\":\"buy|sell|hold\",\"symbol\":\"BTC\",\"leverage\":12,\"amountPercent\":10,\"reason\":\"≤25字\",\"confidence\":0.45}\n\n杠杆范围: 12-25x。超卖反弹规则：如果RSI<20且价格接近EMA20，可轻仓试探buy。RSI<15时confidence可低至0.40。BNB RSI>80时考虑做空。允许每轮都hold。信心<0.40时报hold。上次结论相同可简短。" },
+            { role: "system", content: `你是加密货币交易信号生成器。
+
+【必须】输出格式（严格按此顺序，不得跳过任何部分）：
+
+1. 逐个币种分析（${symbolList} 每个都必须有1-2行分析，不得省略）
+   格式: **SYM** - 趋势判断 + 关键信号指标
+
+2. 信号强度排名（从强到弱列出所有${symbolCount}个币种）
+   格式: 1. SYM (方向, 强度: 强/中/弱, 理由)
+
+3. TOP-1 JSON决策（单行纯JSON，不要markdown代码块包裹）
+
+JSON格式: {"action":"buy|sell|hold","symbol":"BTC","leverage":12,"amountPercent":10,"reason":"≤25字理由","confidence":0.45}
+
+【重要】confidence 是数字类型，不要加引号。正确: "confidence":0.42  错误: "confidence":"0.42"  错误: "confidence":0.42"
+
+交易规则：
+- 杠杆: 12-25x，根据信号强度选择
+- buy: 1h RSI<20超卖反弹，或MACD负值大幅收窄+价格接近EMA20
+- sell: 1h RSI>80超买回落，或MACD正值大幅收窄+价格跌破EMA20
+- hold: 无明确方向信号
+- confidence<0.40时必须action=hold
+- 上次结论相同可简短，但【必须】保留${symbolCount}币种完整分析
+- 【复盘】每个周期先回顾上周期决策的执行结果（成功/失败/原因），再结合当前市场数据做判断` },
             { role: "user", content: `${prompt}\n\n[上周期结论] ${lastDecision || "无"}\n如果市场没明显变化，可以简短总结+hold，不要重复长篇分析。` },
           ],
-          maxOutputTokens: 2048,
+          maxOutputTokens: dynMaxTokens,
           temperature: 0.3,
         });
         decisionText = result.text.trim();
         // Try to parse JSON signal and execute
+        let executionResult = "";
         try {
           const signalMatch = decisionText.match(/\{[\s\S]*"action"[\s\S]*\}/);
           if (signalMatch) {
-            const signal = JSON.parse(signalMatch[0]);
+            // 容错清理：去掉数字后多余引号（如 0.42" → 0.42）、移除尾随逗号
+            let cleanedJson = signalMatch[0]
+              .replace(/":(\d+(?:\.\d+)?)"([,\s}])/g, '":$1$2')  // "confidence":0.42" → "confidence":0.42
+              .replace(/,\s*([}\]])/g, '$1');  // 移除尾随逗号
+            const signal = JSON.parse(cleanedJson);
             logger.info(`🔍 信号: ${JSON.stringify(signal)}`);
             if ((signal.action === "buy" || signal.action === "sell") && signal.confidence >= 0.40 && signal.symbol) {
               const execModule = await import("../tools/trading/index.js");
@@ -1655,13 +1686,19 @@ async function executeTradingDecision() {
                 const resultMsg = r?.success ? `✅ ${r.message || '开仓成功'}` : `❌ ${r?.message || '开仓失败'}`;
                 logger.info(`🚀 执行结果: ${resultMsg}`);
                 decisionText += `\n\n## 执行结果\n${resultMsg}`;
+                executionResult = JSON.stringify({ action: `${signal.action}_${side}`, symbol: signal.symbol, result: resultMsg });
               }
             }
           }
-        } catch (e: any) { logger.error(`信号解析: ${e.message}`); }
+        } catch (e: any) {
+          const errMsg = `❌ 信号解析失败: ${e.message}`;
+          logger.warn(errMsg);
+          decisionText += `\n\n## 执行结果\n${errMsg}`;
+          executionResult = JSON.stringify({ error: "parse_failed", detail: e.message });
+        }
         logger.info(`📤 信号输出: ${decisionText}`);
-        // 跳到保存决策记录
-        await dbClient.execute({ sql: `INSERT INTO agent_decisions (timestamp, iteration, market_analysis, decision, actions_taken, account_value, positions_count) VALUES (?, ?, ?, ?, ?, ?, ?)`, args: [getChinaTimeISO(), iterationCount, JSON.stringify(marketData), decisionText, "[]", accountInfo.totalBalance, positions.length] });
+        // 保存决策记录（包含实际执行结果）
+        await dbClient.execute({ sql: `INSERT INTO agent_decisions (timestamp, iteration, market_analysis, decision, actions_taken, account_value, positions_count) VALUES (?, ?, ?, ?, ?, ?, ?)`, args: [getChinaTimeISO(), iterationCount, JSON.stringify(marketData), decisionText, executionResult || "[]", accountInfo.totalBalance, positions.length] });
         return; // 信号模式完成，跳过后续处理
       }
 

@@ -256,6 +256,11 @@ async function executePartialClose(
           actualExitPrice = currentPrice;
           logger.warn(`ticker价格也无效，使用传入的currentPrice: ${actualExitPrice}`);
         }
+        // 最终兜底：如果所有价格都是0，使用开仓价（PnL=0）
+        if (actualExitPrice <= 0) {
+          actualExitPrice = entryPrice;
+          logger.warn(`所有价格源均无效，使用开仓价作为兜底: ${actualExitPrice}`);
+        }
       } catch (tickerError: any) {
         logger.error(`获取ticker价格失败: ${tickerError.message}，使用传入的currentPrice: ${currentPrice}`);
         actualExitPrice = currentPrice;

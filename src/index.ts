@@ -33,6 +33,9 @@ import { initializeTerminalEncoding} from "./utils/encodingUtils";
 // 设置时区为中国时间（Asia/Shanghai，UTC+8）
 process.env.TZ = 'Asia/Shanghai';
 
+// 修复 EventEmitter 内存泄漏警告（VoltAgent/MCP 连接会注册多个 exit 监听器）
+process.setMaxListeners(20);
+
 // 初始化终端编码设置（解决Windows中文乱码问题）
 initializeTerminalEncoding();
 

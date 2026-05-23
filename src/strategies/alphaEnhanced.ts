@@ -28,11 +28,11 @@ export function getAlphaEnhancedStrategy(maxLeverage: number): StrategyParams {
     },
 
     positionSizeMin: 8,
-    positionSizeMax: 15,
+    positionSizeMax: 35,
     positionSizeRecommend: {
-      normal: "8-10%",
-      good: "10-12%",
-      strong: "12-15%",
+      normal: "8-12%",
+      good: "12-18%",
+      strong: "25-35%",
     },
     maxTotalMarginPercent: 40,
 

@@ -187,11 +187,33 @@ export const openPositionTool = createTool({
           };
         }
         
-        // 方向相同则禁止重复开仓（避免AI在同币种上连续开多个单）
-        return {
-          success: false,
-          message: `拒绝开仓 ${symbol}：已有${side === "long" ? "多" : "空"}单持仓。请先平掉现有持仓后再开新仓。`,
-        };
+        // 方向相同 → 允许加仓，但需满足条件
+        if (existingPosition.entryPrice && Number.parseFloat(existingPosition.entryPrice) > 0) {
+          const posEntryPrice = Number.parseFloat(existingPosition.entryPrice);
+          const posCurrentPrice = Number.parseFloat(existingPosition.markPrice || existingPosition.lastPrice || "0");
+          const posLeverage = parseInt(existingPosition.leverage || "1");
+          const posPnlPercent = ((posCurrentPrice - posEntryPrice) / posEntryPrice * 100 * posLeverage);
+          const posMargin = Math.abs(parseInt(existingPosition.size || "0")) * posEntryPrice / posLeverage;
+          
+          // 强制沿用原仓位杠杆，忽略 AI 传入的杠杆
+          leverage = posLeverage;
+          const maxAddPct = posPnlPercent > 0 ? 0.5 : 0.3;
+          const maxAddAmount = posMargin * maxAddPct;
+          
+          if (amountUsdt > maxAddAmount) {
+            const origAmount = amountUsdt;
+            amountUsdt = maxAddAmount;
+            logger.info(`📉 追加金额 ${origAmount.toFixed(2)} USDT 超限，自动缩至 ${amountUsdt.toFixed(2)} USDT（原仓位 ${(maxAddPct * 100).toFixed(0)}%）`);
+          }
+          
+          if (amountUsdt < 10) {
+            return { success: false, message: `拒绝${posPnlPercent > 0 ? '加仓' : '补仓'} ${symbol}：缩额后金额 ${amountUsdt.toFixed(2)} USDT 过小` };
+          }
+          
+          logger.info(`📈 ${posPnlPercent > 0 ? '加仓' : '补仓'} ${symbol} ${side}：沿用 ${leverage}x 杠杆，当前盈亏 ${posPnlPercent.toFixed(1)}%，追加 ${amountUsdt.toFixed(2)} USDT`);
+        } else {
+          return { success: false, message: `拒绝开仓 ${symbol}：已有同方向持仓，无法获取加仓价格数据` };
+        }
       }
       
       // 3. 🔒 检查该币种是否在同一周期内刚平仓（防止平仓后立即重新开仓）
@@ -357,17 +379,32 @@ export const openPositionTool = createTool({
             return sum + price * size;
           }, 0);
           
-          // 要求订单簿深度至少是开仓金额的5倍
-          const requiredDepth = amountUsdt * leverage * 5;
+          // 要求订单簿深度至少是开仓金额的5倍，深度不足时自动缩仓
+          const maxAttempts = 5;
+          let attemptAmount = amountUsdt;
+          let passed = false;
           
-          if (bidDepth < requiredDepth) {
+          for (let attempt = 0; attempt < maxAttempts; attempt++) {
+            const requiredDepth = attemptAmount * leverage * 5;
+            if (bidDepth >= requiredDepth) {
+              if (attempt > 0) {
+                logger.info(`流动性不足，自动将仓位从 ${(amountUsdt / totalBalance * 100).toFixed(1)}% 降至 ${(attemptAmount / totalBalance * 100).toFixed(1)}%`);
+                amountUsdt = attemptAmount;
+              }
+              passed = true;
+              break;
+            }
+            attemptAmount *= 0.8; // 每次缩减 20%
+          }
+          
+          if (!passed) {
             return {
               success: false,
-              message: `流动性不足：订单簿深度 ${bidDepth.toFixed(2)} USDT < 所需 ${requiredDepth.toFixed(2)} USDT`,
+              message: `流动性不足：订单簿深度 ${bidDepth.toFixed(2)} USDT，最低仓位 ${(attemptAmount / totalBalance * 100).toFixed(1)}%（${attemptAmount.toFixed(2)} USDT）仍不足，放弃开仓`,
             };
           }
           
-          logger.info(`✅ 流动性检查通过：订单簿深度 ${bidDepth.toFixed(2)} USDT >= 所需 ${requiredDepth.toFixed(2)} USDT`);
+          logger.info(`✅ 流动性检查通过：订单簿深度 ${bidDepth.toFixed(2)} USDT >= 所需 ${(amountUsdt * leverage * 5).toFixed(2)} USDT`);
         }
       } catch (error) {
         logger.warn(`获取订单簿失败: ${error}`);
