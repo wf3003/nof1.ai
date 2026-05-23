@@ -187,6 +187,8 @@ ACCOUNT_RECORD_INTERVAL_MINUTES=1            # 账户记录间隔
 - `ACCOUNT_DRAWDOWN_WARNING_PERCENT`: 回撤 20% 时发出警告
 - `ACCOUNT_DRAWDOWN_NO_NEW_POSITION_PERCENT`: 回撤 30% 时禁止开新仓
 - `ACCOUNT_DRAWDOWN_FORCE_CLOSE_PERCENT`: 回撤 50% 时强制平仓保护资金
+- **加仓/补仓自适应**: 盈利时加仓（≤50%原仓位），亏损时补仓（≤30%），杠杆自动沿用原仓位
+- **流动性自动缩仓**: 深度不足时自动降低20%金额重试，最多5次
 
 **数据库配置：**
 - `DATABASE_URL`: 数据库文件路径，存储交易记录和决策日志

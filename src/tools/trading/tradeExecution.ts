@@ -134,6 +134,7 @@ export const openPositionTool = createTool({
     const takeProfit = undefined;
     const client = createExchangeClient();
     const contract = `${symbol}_USDT`;
+    let skipLeverageSetup = false;
     
     try {
       const { getStrategyParams: getStrategyParamsForCheck, getTradingStrategy: getTradingStrategyForCheck } = await import("../../agents/tradingAgent.js");
@@ -159,6 +160,19 @@ export const openPositionTool = createTool({
       
       // ====== 开仓前强制风控检查 ======
       
+      // 0. 检查账户回撤禁止开仓标志
+      try {
+        const drawdownFlag = await dbClient.execute({
+          sql: "SELECT value FROM system_config WHERE key = 'drawdown_no_new_positions'",
+        });
+        if (drawdownFlag.rows.length > 0 && drawdownFlag.rows[0].value === "true") {
+          return {
+            success: false,
+            message: `账户回撤已超过 ${process.env.ACCOUNT_DRAWDOWN_NO_NEW_POSITION_PERCENT || 30}%，禁止开新仓`,
+          };
+        }
+      } catch { /* 忽略查询错误 */ }
+
       // 1. 检查持仓数量（最多5个）
       const allPositions = await client.getPositions();
       const activePositions = allPositions.filter((p: any) => Math.abs(Number.parseInt(p.size || "0")) !== 0);
@@ -210,6 +224,7 @@ export const openPositionTool = createTool({
             return { success: false, message: `拒绝${posPnlPercent > 0 ? '加仓' : '补仓'} ${symbol}：缩额后金额 ${amountUsdt.toFixed(2)} USDT 过小` };
           }
           
+          skipLeverageSetup = true;
           logger.info(`📈 ${posPnlPercent > 0 ? '加仓' : '补仓'} ${symbol} ${side}：沿用 ${leverage}x 杠杆，当前盈亏 ${posPnlPercent.toFixed(1)}%，追加 ${amountUsdt.toFixed(2)} USDT`);
         } else {
           return { success: false, message: `拒绝开仓 ${symbol}：已有同方向持仓，无法获取加仓价格数据` };
@@ -478,8 +493,14 @@ export const openPositionTool = createTool({
       
       // ====== 风控检查通过，继续开仓 ======
       
-      // 设置杠杆（使用调整后的杠杆）
-      await client.setLeverage(contract, adjustedLeverage);
+      // 设置杠杆（加仓时已有持仓不能更改杠杆，跳过）
+      if (!skipLeverageSetup) {
+        try {
+          await client.setLeverage(contract, adjustedLeverage);
+        } catch (e: any) {
+          logger.warn(`设置杠杆失败（可能已有持仓）: ${e.message}`);
+        }
+      }
       
       // 获取当前价格和合约信息
       const ticker = await client.getFuturesTicker(contract);
@@ -781,7 +802,7 @@ export const openPositionTool = createTool({
         price: actualFillPrice,
         leverage,
         actualMargin,
-        message: `✅ 成功开仓 ${symbol} ${side === "long" ? "做多" : "做空"} ${Math.abs(size)} 张 (${contractAmount.toFixed(4)} ${symbol})，成交价 ${actualFillPrice.toFixed(2)}，保证金 ${actualMargin.toFixed(2)} USDT，杠杆 ${leverage}x。⚠️ 未设置止盈止损，请在每个周期主动决策是否平仓。`,
+        message: `✅ 成功开仓 ${symbol} ${side === "long" ? "做多" : "做空"} ${Math.abs(size)} 张 (${contractAmount.toFixed(4)} ${symbol})，成交价 ${actualFillPrice.toFixed(2)}，保证金 ${actualMargin.toFixed(2)} USDT，杠杆 ${adjustedLeverage}x。⚠️ 未设置止盈止损，请在每个周期主动决策是否平仓。`,
       };
     } catch (error: any) {
       return {
@@ -806,6 +827,7 @@ export const closePositionTool = createTool({
   execute: async ({ symbol, percentage }) => {
     const client = createExchangeClient();
     const contract = `${symbol}_USDT`;
+    let skipLeverageSetup = false;
     
     try {
       //  参数验证

@@ -565,6 +565,56 @@ async function checkPeakPnlAndTrailingStop(autoCloseEnabled: boolean) {
         }
       }
       
+      // 3. 账户回撤风控（20%/30%/50%）
+      const drawdown = accountPeakBalance > 0 
+        ? ((accountPeakBalance - totalBalance) / accountPeakBalance * 100) 
+        : 0;
+      const warnPct = Number.parseFloat(process.env.ACCOUNT_DRAWDOWN_WARNING_PERCENT || "20");
+      const noNewPct = Number.parseFloat(process.env.ACCOUNT_DRAWDOWN_NO_NEW_POSITION_PERCENT || "30");
+      const forceClosePct = Number.parseFloat(process.env.ACCOUNT_DRAWDOWN_FORCE_CLOSE_PERCENT || "50");
+      
+      if (drawdown > warnPct) {
+        logger.warn(`⚠️ 账户回撤 ${drawdown.toFixed(2)}% 超过警告线 ${warnPct}%`);
+      }
+      
+      // 禁止开新仓标志（达到阈值后设置，恢复后清除）
+      try {
+        if (drawdown > noNewPct) {
+          await dbClient.execute({
+            sql: "INSERT OR REPLACE INTO system_config (key, value, updated_at) VALUES ('drawdown_no_new_positions', 'true', ?)",
+            args: [getChinaTimeISO()],
+          });
+          logger.warn(`🔴 账户回撤 ${drawdown.toFixed(2)}% 超过 ${noNewPct}%，已设置禁止开新仓标志`);
+        } else {
+          await dbClient.execute({
+            sql: "DELETE FROM system_config WHERE key = 'drawdown_no_new_positions'",
+          });
+        }
+      } catch { /* 忽略 */ }
+      
+      // 强制平仓（超过50%回撤时自动平掉所有仓位）
+      if (drawdown > forceClosePct) {
+        logger.error(`🚨 账户回撤 ${drawdown.toFixed(2)}% 超过强制平仓线 ${forceClosePct}%，执行强制平仓`);
+        try {
+          const allPos = await exchangeClient.getPositions();
+          for (const pos of allPos) {
+            const pSize = Number.parseInt(pos.size || "0");
+            if (pSize === 0) continue;
+            const contract = pos.contract || `${pos.instId?.replace(/-/g, "_")?.replace(/_SWAP$/, "_USDT")}`;
+            await exchangeClient.placeOrder({
+              contract,
+              size: -pSize,
+              price: 0,
+              reduceOnly: true,
+            });
+            logger.error(`🚨 强制平仓: ${contract}`);
+          }
+          logger.error(`🚨 强制平仓完成，所有仓位已清空`);
+        } catch (closeError: any) {
+          logger.error(`🚨 强制平仓失败: ${closeError.message}`);
+        }
+      }
+      
       lastAccountCheckTime = now;
     } catch (error: any) {
       logger.warn(`账户净值监控失败: ${error.message}`);

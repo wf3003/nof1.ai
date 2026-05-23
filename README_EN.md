@@ -132,6 +132,9 @@ The system follows a **minimal human intervention** design philosophy, abandonin
 - **Leverage Control**: Configurable maximum leverage
 - **Trade Throttling**: Minimum interval between trades
 - **Audit Trail**: Complete database logging of all actions
+- **Adaptive Position Adding**: Add to positions when profitable (≤50%) or in loss (≤30%), leverage auto-matches existing position
+- **Auto-Reduce on Low Liquidity**: Auto-reduces position by 20% and retries up to 5 times when order book depth is insufficient
+- **Three-Level Drawdown Protection**: 20% warning, 30% block new positions, 50% force close all positions
 
 ### News Data Integration
 
