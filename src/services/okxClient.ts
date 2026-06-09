@@ -21,6 +21,19 @@
  */
 import * as crypto from "crypto";
 import { createLogger } from "../utils/loggerUtils";
+
+// 代理支持：设置全局 fetch dispatcher（通过 undici ProxyAgent）
+const _proxyUrl = process.env.HTTPS_PROXY || process.env.https_proxy;
+if (_proxyUrl) {
+  try {
+    const { ProxyAgent, setGlobalDispatcher } = await import("undici");
+    setGlobalDispatcher(new ProxyAgent(_proxyUrl));
+    console.warn(`[proxy] HTTPS_PROXY 已配置: ${_proxyUrl}`);
+  } catch (err) {
+    console.warn("[proxy] 代理配置失败（请求将直连）:", err instanceof Error ? err.message : err);
+  }
+}
+
 import { RISK_PARAMS } from "../config/riskParams";
 import { getOkxWebSocketClient } from "./okxWebSocket";
 
@@ -551,7 +564,7 @@ export class OkxClient {
           tdMode: "cross",
           side,
           ordType,
-          sz: params.reduceOnly ? "999999" : Math.abs(params.size).toString(),
+          sz: Math.abs(params.size).toString(),
         };
         if (includePosSide) {
           orderBody.posSide = posSide;

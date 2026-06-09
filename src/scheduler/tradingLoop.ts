@@ -28,6 +28,7 @@ import { getChinaTimeISO } from "../utils/timeUtils";
 import { RISK_PARAMS } from "../config/riskParams";
 import { getQuantoMultiplier } from "../utils/contractUtils";
 import { initNewsClient, fetchCryptoNews, fetchExchangeAnnouncements, fetchLatestEvents, aggregateSentiment } from "../services/newsClient";
+import { createDeepSeekFetch } from "../utils/deepseekFetch";
 
 const logger = createLogger({
   name: "trading-loop",
@@ -1624,7 +1625,7 @@ async function executeTradingDecision() {
         const lastRow = (await dbClient.execute("SELECT decision FROM agent_decisions ORDER BY id DESC LIMIT 1")).rows[0];
         const lastDecision = lastRow ? (lastRow.decision as string).substring(0,200) : "";
         const { createOpenAI } = await import("@ai-sdk/openai");
-        const ai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY || "", baseURL: process.env.OPENAI_BASE_URL, fetch: async (url: any, options: any) => { if (options?.body) { try { const b = JSON.parse(options.body as string); b.thinking = { type: "disabled" }; options.body = JSON.stringify(b); } catch {} } return fetch(url, options as any); } });
+        const ai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY || "", baseURL: process.env.OPENAI_BASE_URL, fetch: createDeepSeekFetch() });
         const model = ai.chat(process.env.AI_MODEL_NAME || "deepseek-v4-flash");
         const symbolCount = SYMBOLS.length;
         const symbolList = SYMBOLS.join("、");

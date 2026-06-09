@@ -23,6 +23,7 @@ import { Agent, Memory } from "@voltagent/core";
 import { LibSQLMemoryAdapter } from "@voltagent/libsql";
 import { createLogger } from "../utils/loggerUtils";
 import { createOpenAI } from "@ai-sdk/openai";
+import { createDeepSeekFetch } from "../utils/deepseekFetch";
 import * as tradingTools from "../tools/trading";
 import { formatChinaTime } from "../utils/timeUtils";
 import { getRecentClosedTrades, getRecentTrades, summarizeClosedTrades, getMostRecentCloseTrade } from "./tradeHistoryUtils";
@@ -1965,17 +1966,7 @@ export async function createTradingAgent(intervalMinutes: number = 5, marketData
   const openai = createOpenAI({
     apiKey: process.env.OPENAI_API_KEY || "",
     baseURL: process.env.OPENAI_BASE_URL || "https://openrouter.ai/api/v1",
-    fetch: async (url, options) => {
-      // DeepSeek V4: 注入 thinking: disabled 以禁用思考模式
-      if (options?.body) {
-        try {
-          const body = JSON.parse(options.body as string);
-          body.thinking = { type: "disabled" };
-          options.body = JSON.stringify(body);
-        } catch {}
-      }
-      return fetch(url, options as any);
-    },
+    fetch: createDeepSeekFetch(),
   });
 
   const memory = new Memory({

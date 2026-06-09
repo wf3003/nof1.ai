@@ -18,6 +18,7 @@
 
 import { Agent } from "@voltagent/core";
 import { createOpenAI } from "@ai-sdk/openai";
+import { createDeepSeekFetch } from "../utils/deepseekFetch";
 import * as tradingTools from "../tools/trading";
 import { createLogger } from "../utils/loggerUtils";
 
@@ -35,16 +36,7 @@ export function createAggressiveTeamTrendExpertAgent(marketDataContext?: any) {
   const openai = createOpenAI({
     apiKey: process.env.OPENAI_API_KEY || "",
     baseURL: process.env.OPENAI_BASE_URL || "https://openrouter.ai/api/v1",
-    fetch: async (url, options) => {
-      if (options?.body) {
-        try {
-          const body = JSON.parse(options.body as string);
-          body.thinking = { type: "disabled" };
-          options.body = JSON.stringify(body);
-        } catch {}
-      }
-      return fetch(url, options as any);
-    },
+    fetch: createDeepSeekFetch(),
   });
 
   let instructions = `你是激进团的趋势分析专家（团员1）。
@@ -168,16 +160,7 @@ export function createAggressiveTeamPredictionExpertAgent(marketDataContext?: an
   const openai = createOpenAI({
     apiKey: process.env.OPENAI_API_KEY || "",
     baseURL: process.env.OPENAI_BASE_URL || "https://openrouter.ai/api/v1",
-    fetch: async (url, options) => {
-      if (options?.body) {
-        try {
-          const body = JSON.parse(options.body as string);
-          body.thinking = { type: "disabled" };
-          options.body = JSON.stringify(body);
-        } catch {}
-      }
-      return fetch(url, options as any);
-    },
+    fetch: createDeepSeekFetch(),
   });
 
   let instructions = `你是激进团的预测分析专家（团员2）。
@@ -304,16 +287,7 @@ export function createAggressiveTeamMoneyFlowExpertAgent(marketDataContext?: any
   const openai = createOpenAI({
     apiKey: process.env.OPENAI_API_KEY || "",
     baseURL: process.env.OPENAI_BASE_URL || "https://openrouter.ai/api/v1",
-    fetch: async (url, options) => {
-      if (options?.body) {
-        try {
-          const body = JSON.parse(options.body as string);
-          body.thinking = { type: "disabled" };
-          options.body = JSON.stringify(body);
-        } catch {}
-      }
-      return fetch(url, options as any);
-    },
+    fetch: createDeepSeekFetch(),
   });
 
   let instructions = `你是激进团的资金流向分析专家（团员3）。
@@ -436,16 +410,7 @@ export function createAggressiveTeamRiskControlExpertAgent(marketDataContext?: a
   const openai = createOpenAI({
     apiKey: process.env.OPENAI_API_KEY || "",
     baseURL: process.env.OPENAI_BASE_URL || "https://openrouter.ai/api/v1",
-    fetch: async (url, options) => {
-      if (options?.body) {
-        try {
-          const body = JSON.parse(options.body as string);
-          body.thinking = { type: "disabled" };
-          options.body = JSON.stringify(body);
-        } catch {}
-      }
-      return fetch(url, options as any);
-    },
+    fetch: createDeepSeekFetch(),
   });
 
   let instructions = `你是激进团的风险控制专家（团员4）。
