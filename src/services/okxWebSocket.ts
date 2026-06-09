@@ -61,7 +61,7 @@ export class OkxWebSocketClient {
 
   constructor() {
     // OKX 公共频道 WebSocket 地址
-    this.wsUrl = "wss://ws.okx.com:8443/ws/v5/public";
+    this.wsUrl = "wss://ws.okx.com/ws/v5/public";
     this.proxyUrl = process.env.HTTPS_PROXY || process.env.https_proxy;
     if (this.proxyUrl) {
       logger.info(`WebSocket 代理已配置: ${this.proxyUrl}`);
