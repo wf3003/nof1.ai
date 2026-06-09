@@ -21,6 +21,7 @@
  * 用于订阅行情数据，避免 REST API 速率限制
  */
 import WebSocket from "ws";
+import { HttpsProxyAgent } from "https-proxy-agent";
 import { createLogger } from "../utils/loggerUtils";
 
 const logger = createLogger({
@@ -56,11 +57,14 @@ export class OkxWebSocketClient {
   private tickerCache: Map<string, any> = new Map();
   private candleCache: Map<string, CandleCache> = new Map();
 
+  private readonly proxyUrl: string | undefined;
+
   constructor() {
-    // OKX 公共频道 WebSocket 地址（走 undici 全局代理，无需额外配置）
+    // OKX 公共频道 WebSocket 地址（标准 443 端口，通过代理转发）
     this.wsUrl = "wss://ws.okx.com/ws/v5/public";
-    if (process.env.HTTPS_PROXY || process.env.https_proxy) {
-      logger.info(`WebSocket 代理已配置 (undici): ${process.env.HTTPS_PROXY || process.env.https_proxy}`);
+    this.proxyUrl = process.env.HTTPS_PROXY || process.env.https_proxy;
+    if (this.proxyUrl) {
+      logger.info(`WebSocket 代理已配置: ${this.proxyUrl}`);
     }
     logger.info("OKX WebSocket 客户端初始化");
   }
@@ -76,7 +80,9 @@ export class OkxWebSocketClient {
     return new Promise((resolve, reject) => {
       try {
         logger.info("连接 OKX WebSocket...");
-        this.ws = new WebSocket(this.wsUrl);
+        this.ws = new WebSocket(this.wsUrl, {
+          agent: this.proxyUrl ? new HttpsProxyAgent(this.proxyUrl) : undefined,
+        });
 
         this.ws.on("open", () => {
           logger.info("OKX WebSocket 连接成功");
