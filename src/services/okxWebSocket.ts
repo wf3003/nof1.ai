@@ -21,7 +21,8 @@
  * 用于订阅行情数据，避免 REST API 速率限制
  */
 import WebSocket from "ws";
-import { HttpsProxyAgent } from "https-proxy-agent";
+import { connect as tcpConnect } from "net";
+import { connect as tlsConnect } from "tls";
 import { createLogger } from "../utils/loggerUtils";
 
 const logger = createLogger({
@@ -57,14 +58,18 @@ export class OkxWebSocketClient {
   private tickerCache: Map<string, any> = new Map();
   private candleCache: Map<string, CandleCache> = new Map();
 
-  private readonly proxyUrl: string | undefined;
+  private readonly proxyHost: string | undefined;
+  private readonly proxyPort: number | undefined;
 
   constructor() {
-    // OKX 公共频道 WebSocket 地址（标准 443 端口，通过代理转发）
+    // OKX 公共频道 WebSocket 地址（标准 443 端口）
     this.wsUrl = "wss://ws.okx.com/ws/v5/public";
-    this.proxyUrl = process.env.HTTPS_PROXY || process.env.https_proxy;
-    if (this.proxyUrl) {
-      logger.info(`WebSocket 代理已配置: ${this.proxyUrl}`);
+    const proxyUrl = process.env.HTTPS_PROXY || process.env.https_proxy || "";
+    if (proxyUrl) {
+      const u = new URL(proxyUrl);
+      this.proxyHost = u.hostname;
+      this.proxyPort = parseInt(u.port) || 7890;
+      logger.info(`WebSocket 代理已配置: ${this.proxyHost}:${this.proxyPort}`);
     }
     logger.info("OKX WebSocket 客户端初始化");
   }
@@ -80,9 +85,25 @@ export class OkxWebSocketClient {
     return new Promise((resolve, reject) => {
       try {
         logger.info("连接 OKX WebSocket...");
-        this.ws = new WebSocket(this.wsUrl, {
-          agent: this.proxyUrl ? new HttpsProxyAgent(this.proxyUrl) : undefined,
-        });
+        const wsOpts: any = {};
+        if (this.proxyHost && this.proxyPort) {
+          // 手动 TCP CONNECT 隧道穿越代理（不依赖第三方包）
+          wsOpts.createConnection = (options: any) => new Promise((resolve) => {
+            const sock = tcpConnect(this.proxyPort!, this.proxyHost, () => {
+              sock.write(`CONNECT ${options.host}:${options.port} HTTP/1.1\r\nHost: ${options.host}:${options.port}\r\n\r\n`);
+            });
+            sock.once("data", (chunk) => {
+              if (chunk.toString().includes("200")) {
+                const tlssock = tlsConnect({ socket: sock, servername: options.host });
+                resolve(tlssock);
+              } else {
+                sock.destroy();
+                resolve(sock);
+              }
+            });
+          });
+        }
+        this.ws = new WebSocket(this.wsUrl, wsOpts);
 
         this.ws.on("open", () => {
           logger.info("OKX WebSocket 连接成功");
