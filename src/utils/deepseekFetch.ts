@@ -6,10 +6,12 @@
  * 3. 删除 temperature（推理模型不支持）
  */
 export function createDeepSeekFetch(): (
-  url: string | URL,
-  options?: RequestInit
+  input: RequestInfo | URL,
+  init?: RequestInit
 ) => Promise<Response> {
-  return async (url, options) => {
+  return async (input, init) => {
+    const options = init as any;
+    const url = input as string | URL;
     if (options?.body) {
       try {
         const body = JSON.parse(options.body as string);
