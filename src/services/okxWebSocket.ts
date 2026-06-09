@@ -88,20 +88,21 @@ export class OkxWebSocketClient {
         const wsOpts: any = {};
         if (this.proxyHost && this.proxyPort) {
           // 手动 TCP CONNECT 隧道穿越代理（不依赖第三方包）
-          wsOpts.createConnection = (options: any) => new Promise((resolve) => {
+          wsOpts.createConnection = (options: any, cb: (err: Error | null, sock?: any) => void) => {
             const sock = tcpConnect(this.proxyPort!, this.proxyHost, () => {
               sock.write(`CONNECT ${options.host}:${options.port} HTTP/1.1\r\nHost: ${options.host}:${options.port}\r\n\r\n`);
             });
             sock.once("data", (chunk) => {
               if (chunk.toString().includes("200")) {
                 const tlssock = tlsConnect({ socket: sock, servername: options.host });
-                resolve(tlssock);
+                cb(null, tlssock);
               } else {
                 sock.destroy();
-                resolve(sock);
+                cb(new Error("Proxy rejected"));
               }
             });
-          });
+            sock.once("error", (e) => cb(e));
+          };
         }
         this.ws = new WebSocket(this.wsUrl, wsOpts);
 
