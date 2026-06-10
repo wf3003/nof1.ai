@@ -340,7 +340,18 @@ async function executeTrailingStopClose(
   const contract = `${symbol}_USDT`;
   
   try {
-    const size = side === 'long' ? -quantity : quantity;
+    // 获取合约 lotSize，确保平仓数量是合约最小单位的整数倍（避免残留零头）
+    const contractInfo = await exchangeClient.getContractInfo(contract);
+    const lotSize = Number.parseFloat(contractInfo.lotSize || contractInfo.order_size_round || "1");
+    let adjustedQty = lotSize > 0 
+      ? Math.floor(quantity / lotSize) * lotSize 
+      : quantity;
+    // 修正浮点数精度
+    const decimals = lotSize > 0 ? (lotSize.toString().split('.')[1] || '').length : 0;
+    adjustedQty = Number.parseFloat(adjustedQty.toFixed(decimals));
+    if (adjustedQty <= 0) adjustedQty = quantity; // 兜底：如果截断后为0，使用原始值
+    
+    const size = side === 'long' ? -adjustedQty : adjustedQty;
     
     logger.warn(`【触发移动止盈 ${stage}】${symbol} ${side}`);
     logger.warn(`  峰值盈利: ${peakPnlPercent.toFixed(2)}%`);
