@@ -32,7 +32,7 @@ import type { StrategyParams, StrategyPromptContext } from "./types";
  * 核心策略：
  * - 单边行情：谨慎参与（标准仓位+低杠杆）
  * - 震荡行情：严格防守（最小仓位+最低杠杆）
- * - 风控方式：AI 主动止损止盈（enableCodeLevelProtection = false，由AI主动判断执行）
+ * - 风控方式：代码自动移动止盈（enableCodeLevelProtection = true，trailingStopMonitor 执行）
  * 
  * @param maxLeverage - 系统允许的最大杠杆倍数（从配置文件读取）
  * @returns 稳健策略的完整参数配置
@@ -137,7 +137,7 @@ export function getConservativeStrategy(maxLeverage: number): StrategyParams {
     // 控制上述 stopLoss、trailingStop、partialTakeProfit 的执行方式
     // - true：代码自动执行（监控器每10秒检查，AI只需负责开仓）
     // - false：AI主动执行（AI根据配置在交易周期中判断和执行）
-    enableCodeLevelProtection: false,
+    enableCodeLevelProtection: true,
   };
 }
 
