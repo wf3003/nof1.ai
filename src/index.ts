@@ -91,9 +91,8 @@ async function main() {
   logger.info("启动止损监控器...");
   startStopLossMonitor();
   
-  // 8. 启动分批止盈监控器（每10秒检查一次）
-  logger.info("启动分批止盈监控器...");
-  startPartialProfitMonitor();
+  // 8. 分批止盈已禁用，仅使用移动止盈（trailingStopMonitor）
+  // startPartialProfitMonitor();
   
   const strategy = getTradingStrategy();
   const params = getStrategyParams(strategy);
