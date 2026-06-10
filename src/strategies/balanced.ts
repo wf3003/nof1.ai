@@ -32,7 +32,7 @@ import type { StrategyParams, StrategyPromptContext } from "./types";
  * 核心策略：
  * - 单边行情：积极参与（标准仓位+合理杠杆）
  * - 震荡行情：谨慎防守（小仓位+低杠杆）
- * - 风控方式：AI 主动止损止盈（enableCodeLevelProtection = false，由AI主动判断执行）
+ * - 风控方式：代码自动移动止盈（enableCodeLevelProtection = true，trailingStopMonitor 执行）
  * 
  * @param maxLeverage - 系统允许的最大杠杆倍数（从配置文件读取）
  * @returns 平衡策略的完整参数配置
@@ -104,7 +104,7 @@ export function getBalancedStrategy(maxLeverage: number): StrategyParams {
     //   - enableCodeLevelProtection = false：AI根据此配置主动判断和执行
     partialTakeProfit: {
       // 平衡策略：标准分批止盈，逐步锁定利润
-      stage1: { trigger: 30, closePercent: 50 },   // +30%时平仓50%（锁定部分利润）
+      stage1: { trigger: 999, closePercent: 0 },   // +30%时平仓50%（锁定部分利润）
       stage2: { trigger: 40, closePercent: 50 },   // +40%时平仓剩余50%（累计平100%）
       stage3: { trigger: 50, closePercent: 100 },  // +50%时全部清仓（防止利润回吐）
     },
@@ -112,7 +112,7 @@ export function getBalancedStrategy(maxLeverage: number): StrategyParams {
     // ==================== 峰值回撤保护 ====================
     // 盈利从峰值回撤30%时，AI强烈建议平仓
     // 例如：峰值+30%，回撤到+0%时（回撤30个百分点），触发保护
-    peakDrawdownProtection: 30,
+    peakDrawdownProtection: 80,
     
     // ==================== 波动率调整 ====================
     // 根据市场波动自动调整杠杆和仓位
@@ -140,7 +140,7 @@ export function getBalancedStrategy(maxLeverage: number): StrategyParams {
     // 控制上述 stopLoss、trailingStop、partialTakeProfit 的执行方式
     // - true：代码自动执行（监控器每10秒检查，AI只需负责开仓）
     // - false：AI主动执行（AI根据配置在交易周期中判断和执行）
-    enableCodeLevelProtection: false,
+    enableCodeLevelProtection: true,
   };
 }
 
