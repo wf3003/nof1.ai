@@ -110,9 +110,8 @@ export function getConservativeStrategy(maxLeverage: number): StrategyParams {
     },
     
     // ==================== 峰值回撤保护 ====================
-    // 盈利从峰值回撤25%时，AI强烈建议平仓（更早保护利润）
-    // 例如：峰值+25%，回撤到+0%时（回撤25个百分点），触发保护
-    peakDrawdownProtection: 25,
+    // AI 峰值回撤保护已禁用（由 trailingStopMonitor 动态止盈接管）
+    peakDrawdownProtection: 80,
     
     // ==================== 波动率调整 ====================
     // 根据市场波动自动调整杠杆和仓位
