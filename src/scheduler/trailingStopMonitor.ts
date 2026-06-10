@@ -106,9 +106,11 @@ function checkTrailingStop(peakPnlPercent: number, currentPnlPercent: number): {
   
   for (const level of levels) {
     if (peakPnlPercent >= level.trigger) {
-      // 动态止损线 = 基础stopAt + (峰值 - 触发点) × 0.5（保留50%超额利润）
+      // 动态止损线 = 基础stopAt + (峰值 - 触发点) × 渐进比例
+      // 比例随峰值提高：小利润松(46%)，大利润紧(70%)，避免高额U数大幅回吐
       const extraGain = peakPnlPercent - level.trigger;
-      const dynStopAt = level.stopAt + extraGain * 0.5;
+      const trailRatio = Math.min(0.7, 0.4 + peakPnlPercent / 100);
+      const dynStopAt = level.stopAt + extraGain * trailRatio;
       
       if (currentPnlPercent <= dynStopAt) {
         // 当前盈利回落到动态止损线或以下，触发平仓
