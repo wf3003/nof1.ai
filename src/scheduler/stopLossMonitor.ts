@@ -551,7 +551,24 @@ async function checkStopLoss() {
       const stopLossOverride = parseNullableNumber(dbPosition?.stop_loss);
       const partialClosePercentage = parseNullableNumber(dbPosition?.partial_close_percentage) ?? 0;
 
-      // 3. 检查止损条件
+      // 3. 新仓保护：开仓后 30 秒内跳过止损（防 spread/噪音误杀，高杠杆常见）
+      const dbPositionInfo = await dbClient.execute({
+        sql: "SELECT opened_at FROM positions WHERE symbol = ? LIMIT 1",
+        args: [symbol],
+      });
+      if (dbPositionInfo.rows.length > 0) {
+        const openedAt = dbPositionInfo.rows[0].opened_at as string;
+        if (openedAt) {
+          const openedMs = new Date(openedAt).getTime();
+          const ageMs = Date.now() - openedMs;
+          if (ageMs < 30_000) {
+            // 新仓保护期内，跳过止损
+            continue;
+          }
+        }
+      }
+      
+      // 4. 检查止损条件
       const thresholdInfo = getStopLossThreshold(leverage, stopLossOverride, partialClosePercentage);
       
       // 检查是否触发止损（亏损达到或超过止损线）
