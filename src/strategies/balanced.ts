@@ -105,8 +105,8 @@ export function getBalancedStrategy(maxLeverage: number): StrategyParams {
     partialTakeProfit: {
       // 平衡策略：标准分批止盈，逐步锁定利润
       stage1: { trigger: 999, closePercent: 0 },   // +30%时平仓50%（锁定部分利润）
-      stage2: { trigger: 40, closePercent: 50 },   // +40%时平仓剩余50%（累计平100%）
-      stage3: { trigger: 50, closePercent: 100 },  // +50%时全部清仓（防止利润回吐）
+      stage2: { trigger: 999, closePercent: 0 },   // 禁用
+      stage3: { trigger: 999, closePercent: 0 },   // 禁用
     },
     
     // ==================== 峰值回撤保护 ====================
