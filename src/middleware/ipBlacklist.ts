@@ -100,8 +100,7 @@ function getClientIp(c: Context): string {
     return env.ip;
   }
 
-  // 如果都获取不到，记录警告
-  logger.warn("无法获取客户端 IP，使用 unknown");
+  // 如果都获取不到，静默使用 unknown
   return "unknown";
 }
 

@@ -196,6 +196,47 @@ CREATE TABLE IF NOT EXISTS system_config (
   updated_at TEXT NOT NULL
 );
 
+-- 指标快照表（开仓时刻完整指标 — 从 SmartTrade2 移植）
+CREATE TABLE IF NOT EXISTS indicator_snapshots (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  decision_id INTEGER,
+  time TEXT NOT NULL,
+  symbol TEXT NOT NULL,
+  side TEXT NOT NULL,
+  rsi_1h REAL,
+  rsi_1d REAL,
+  adx_1h REAL,
+  adx_1d REAL,
+  atr_pct REAL,
+  ema_dist_pct REAL,
+  funding_rate REAL,
+  volume_24h REAL,
+  market_quality INTEGER,
+  entry_quality INTEGER,
+  leverage INTEGER,
+  position_pct REAL,
+  ai_score REAL,
+  signal_type TEXT,
+  result TEXT DEFAULT 'open',
+  pnl REAL,
+  close_type TEXT
+);
+
+-- 优化规则表（自动生成评分/仓位调整规则 — 从 SmartTrade2 移植）
+CREATE TABLE IF NOT EXISTS opt_rules (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  target TEXT NOT NULL,
+  regime TEXT DEFAULT 'all',
+  indicator TEXT NOT NULL,
+  operator TEXT NOT NULL,
+  val1 REAL NOT NULL,
+  val2 REAL,
+  impact_type TEXT NOT NULL,
+  impact_value REAL NOT NULL,
+  active INTEGER DEFAULT 1,
+  created_at TEXT
+);
+
 -- 创建索引
 CREATE INDEX IF NOT EXISTS idx_trades_timestamp ON trades(timestamp);
 CREATE INDEX IF NOT EXISTS idx_trades_symbol ON trades(symbol);
@@ -204,4 +245,3 @@ CREATE INDEX IF NOT EXISTS idx_signals_symbol ON trading_signals(symbol);
 CREATE INDEX IF NOT EXISTS idx_history_timestamp ON account_history(timestamp);
 CREATE INDEX IF NOT EXISTS idx_decisions_timestamp ON agent_decisions(timestamp);
 `;
-

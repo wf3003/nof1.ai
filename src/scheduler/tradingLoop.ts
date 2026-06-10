@@ -29,6 +29,9 @@ import { RISK_PARAMS } from "../config/riskParams";
 import { getQuantoMultiplier } from "../utils/contractUtils";
 import { initNewsClient, fetchCryptoNews, fetchExchangeAnnouncements, fetchLatestEvents, aggregateSentiment } from "../services/newsClient";
 import { createDeepSeekFetch } from "../utils/deepseekFetch";
+// 从 SmartTrade2 移植
+import { setCurrentCycle, recordTradeClose, isDirectionBlocked } from "./directionBlock";
+import { runCascadeFilter } from "./cascadeFilter";
 
 const logger = createLogger({
   name: "trading-loop",
@@ -1167,6 +1170,7 @@ async function checkAccountThresholds(accountInfo: any): Promise<boolean> {
  */
 async function executeTradingDecision() {
   iterationCount++;
+  setCurrentCycle(iterationCount);  // 方向阻断周期同步（from SmartTrade2）
   const minutesElapsed = Math.floor((Date.now() - tradingStartTime.getTime()) / 60000);
   const intervalMinutes = Number.parseInt(process.env.TRADING_INTERVAL_MINUTES || "5");
   
@@ -1678,18 +1682,47 @@ JSON格式: {"action":"buy|sell|hold","symbol":"BTC","leverage":12,"amountPercen
               const execModule = await import("../tools/trading/index.js");
               const execTool = (execModule as any).openPositionTool;
               const side: "long" | "short" = signal.action === "buy" ? "long" : "short";
+
               const strategyParams = getStrategyParams(strategy);
               const lev = Math.max(strategyParams.leverageMin, Math.min(signal.leverage || strategyParams.leverageMin, strategyParams.leverageMax));
               const pct = Math.max(5, Math.min(signal.amountPercent || 15, 30));
-              const amount = (accountInfo.availableBalance * pct) / 100;
-              if (amount > 10 && execTool?.execute) {
-                const r: any = await execTool.execute({ symbol: signal.symbol, side, leverage: lev, amountUsdt: amount });
-                const resultMsg = r?.success ? `✅ ${r.message || '开仓成功'}` : `❌ ${r?.message || '开仓失败'}`;
-                logger.info(`🚀 执行结果: ${resultMsg}`);
-                decisionText += `\n\n## 执行结果\n${resultMsg}`;
-                executionResult = JSON.stringify({ action: `${signal.action}_${side}`, symbol: signal.symbol, result: resultMsg });
+
+              // ====== 级联过滤（from SmartTrade2） ======
+              const cascadeResult = runCascadeFilter({
+                symbol: signal.symbol,
+                side,
+                aiScore: Math.round((signal.confidence || 0.5) * 100),
+                marketQuality: 50,  // 默认中性，后续可从 marketData 中获取
+                entryQuality: 50,
+                rsi1h: 50,
+                leverage: lev,
+                amountPercent: pct,
+                existingPositions: positions.length,
+                sameSymbolPositions: 0,
+                lastTradeLost: false,
+              });
+              if (!cascadeResult.passed) {
+                logger.warn(`🚫 级联过滤拦截: ${cascadeResult.blockReasons.join(" | ")}`);
+                decisionText += `\n\n## 级联过滤\n❌ ${cascadeResult.blockReasons.join(" | ")}`;
+                executionResult = JSON.stringify({ filtered: true, reasons: cascadeResult.blockReasons });
+              } else {
+                const finalLev = cascadeResult.adjustedLeverage || lev;
+                const finalPct = cascadeResult.adjustedAmount || pct;
+                if (cascadeResult.blockReasons.length > 0) {
+                  logger.info(`📋 级联调整: ${cascadeResult.blockReasons.join(" | ")}`);
+                }
+                // ====== 级联过滤 END ======
+
+                const amount = (accountInfo.availableBalance * finalPct) / 100;
+                if (amount > 10 && execTool?.execute) {
+                  const r: any = await execTool.execute({ symbol: signal.symbol, side, leverage: finalLev, amountUsdt: amount });
+                  const resultMsg = r?.success ? `✅ ${r.message || '开仓成功'}` : `❌ ${r?.message || '开仓失败'}`;
+                  logger.info(`🚀 执行结果: ${resultMsg}`);
+                  decisionText += `\n\n## 执行结果\n${resultMsg}`;
+                  executionResult = JSON.stringify({ action: `${signal.action}_${side}`, symbol: signal.symbol, result: resultMsg });
+                }
               }
-            }
+          }
           }
         } catch (e: any) {
           const errMsg = `❌ 信号解析失败: ${e.message}`;
