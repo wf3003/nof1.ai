@@ -100,13 +100,11 @@ export function getConservativeStrategy(maxLeverage: number): StrategyParams {
     // ==================== 分批止盈配置 ====================
     // 逐步锁定利润
     // 执行方式：
-    //   - enableCodeLevelProtection = true：代码自动执行（每10秒检查，partialProfitMonitor.ts）
-    //   - enableCodeLevelProtection = false：AI根据此配置主动判断和执行
+    // 分批止盈已禁用（由 trailingStopMonitor 动态止盈接管）
     partialTakeProfit: {
-      // 保守策略：较早分批止盈，提前锁定利润
-      stage1: { trigger: 20, closePercent: 50 },   // +20%时平仓50%（较早锁定）
-      stage2: { trigger: 30, closePercent: 50 },   // +30%时平仓剩余50%（累计平100%）
-      stage3: { trigger: 40, closePercent: 100 },  // +40%时全部清仓（防止利润回吐）
+      stage1: { trigger: 999, closePercent: 0 },   // 禁用
+      stage2: { trigger: 999, closePercent: 0 },   // 禁用
+      stage3: { trigger: 999, closePercent: 0 },   // 禁用
     },
     
     // ==================== 峰值回撤保护 ====================
