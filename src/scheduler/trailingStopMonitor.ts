@@ -106,22 +106,25 @@ function checkTrailingStop(peakPnlPercent: number, currentPnlPercent: number): {
   
   for (const level of levels) {
     if (peakPnlPercent >= level.trigger) {
-      // 峰值达到了触发点
-      if (currentPnlPercent <= level.stopAt) {
-        // 当前盈利回落到止损点或以下，触发平仓
+      // 动态止损线 = 基础stopAt + (峰值 - 触发点) × 0.5（保留50%超额利润）
+      const extraGain = peakPnlPercent - level.trigger;
+      const dynStopAt = level.stopAt + extraGain * 0.5;
+      
+      if (currentPnlPercent <= dynStopAt) {
+        // 当前盈利回落到动态止损线或以下，触发平仓
         return {
           shouldClose: true,
           level: level.name,
-          description: `峰值${peakPnlPercent.toFixed(2)}%，触发${level.trigger}%移动止盈，当前${currentPnlPercent.toFixed(2)}%已回落至${level.stopAt}%止损线`,
-          stopAt: level.stopAt,
+          description: `峰值${peakPnlPercent.toFixed(2)}%，触发${level.trigger}%移动止盈，动态止损线${dynStopAt.toFixed(1)}%，当前${currentPnlPercent.toFixed(2)}%已回落平仓`,
+          stopAt: dynStopAt,
         };
       } else {
         // 还在止损线之上，继续持有
         return {
           shouldClose: false,
           level: level.name,
-          description: `峰值${peakPnlPercent.toFixed(2)}%，触发${level.trigger}%移动止盈，止损线${level.stopAt}%，当前${currentPnlPercent.toFixed(2)}%`,
-          stopAt: level.stopAt,
+          description: `峰值${peakPnlPercent.toFixed(2)}%，触发${level.trigger}%移动止盈，动态止损线${dynStopAt.toFixed(1)}%，当前${currentPnlPercent.toFixed(2)}%`,
+          stopAt: dynStopAt,
         };
       }
     }
