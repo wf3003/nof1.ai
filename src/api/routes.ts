@@ -51,7 +51,7 @@ export function createApiRoutes() {
   /**
    * 获取账户总览
    * 
-   * account.total 是交易所返回的净值（含未实现盈亏），与 SmartTrade2 的 totalEquity 一致
+   * 已实现余额 = account.total - unrealisedPnl，不含浮动盈亏，不受持仓涨跌干扰
    */
   app.get("/api/account", async (c) => {
     try {
@@ -66,11 +66,12 @@ export function createApiRoutes() {
         ? Number.parseFloat(initialResult.rows[0].total_value as string)
         : 100;
       
-      // 净值 = account.total（交易所已包含未实现盈亏，无需手动加减）
-      const totalBalance = Number.parseFloat(account.total || "0");
+      // 已实现余额 = account.total - unrealisedPnl（不含浮动盈亏，不受持仓涨跌干扰）
+      const total = Number.parseFloat(account.total || "0");
       const unrealisedPnl = Number.parseFloat(account.unrealisedPnl || "0");
+      const totalBalance = total - unrealisedPnl;
 
-      // 收益率 = (净值 - 初始资金) / 初始资金 * 100
+      // 收益率 = (已实现余额 - 初始资金) / 初始资金 * 100
       const returnPercent = ((totalBalance - initialBalance) / initialBalance) * 100;
 
       // 查询累计手续费（所有已平仓交易的手续费总和）
@@ -84,11 +85,11 @@ export function createApiRoutes() {
       const rebateAmount = totalFees * (feeRebatePercent / 100);
 
       return c.json({
-        totalBalance,  // 净值（交易所返回，含未实现盈亏）
+        totalBalance,  // 已实现余额（不含未实现盈亏）
         availableBalance: Number.parseFloat(account.available || "0"),
         positionMargin: Number.parseFloat(account.positionMargin || "0"),
         unrealisedPnl,
-        returnPercent,  // 收益率（基于净值计算，已含未实现盈亏）
+        returnPercent,  // 收益率（基于已实现余额计算）
         initialBalance,
         totalFees,           // 累计手续费
         feeRebatePercent,    // 返佣比例（%）
