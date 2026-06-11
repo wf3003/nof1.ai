@@ -90,15 +90,10 @@ class TradingMonitor {
 
             this.accountData = data;
             
-            // 使用和 app.js 相同的算法计算总资产
-            // API 返回的 totalBalance 不包含未实现盈亏
-            // 显示的总资产需要加上未实现盈亏，以便实时反映持仓盈亏
-            const totalBalanceWithPnl = data.totalBalance + data.unrealisedPnl;
-            
-            // 更新总资产
+            // 更新总资产（API 已返回含未实现盈亏的净值）
         const accountValueEl = document.getElementById('account-value');
             if (accountValueEl) {
-                accountValueEl.textContent = totalBalanceWithPnl.toFixed(2);
+                accountValueEl.textContent = data.totalBalance.toFixed(2);
             }
 
             // 更新可用余额
@@ -128,10 +123,10 @@ class TradingMonitor {
                 rebateAmountEl.textContent = '+' + rebate.toFixed(2);
             }
 
-            // 更新返佣后理论总资产 = 总资产(含未实现盈亏) + 返佣金额
+            // 更新返佣后理论总资产 = 总资产 + 返佣金额
             const rebateTotalEl = document.getElementById('rebate-total-assets');
             if (rebateTotalEl) {
-                const rebateTotalAssets = totalBalanceWithPnl + (data.rebateAmount || 0);
+                const rebateTotalAssets = data.totalBalance + (data.rebateAmount || 0);
                 rebateTotalEl.textContent = rebateTotalAssets.toFixed(2);
             }
 
@@ -140,9 +135,9 @@ class TradingMonitor {
         const valuePercentEl = document.getElementById('value-percent');
 
             if (valueChangeEl && valuePercentEl) {
-                // 收益率 = (总资产(含未实现盈亏) - 初始资金) / 初始资金 * 100
-                const totalPnl = totalBalanceWithPnl - data.initialBalance;
-                const returnPercent = (totalPnl / data.initialBalance) * 100;
+                // 使用 API 返回的收益率（已含未实现盈亏）
+                const returnPercent = data.returnPercent;
+                const totalPnl = data.totalBalance - data.initialBalance;
                 const isPositive = totalPnl >= 0;
                 
                 valueChangeEl.textContent = `${isPositive ? '+' : ''}$${Math.abs(totalPnl).toFixed(2)}`;

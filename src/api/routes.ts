@@ -51,17 +51,7 @@ export function createApiRoutes() {
   /**
    * 获取账户总览
    * 
-   * Gate.io 账户结构：
-   * - account.total = available + positionMargin
-   * - account.total 不包含未实现盈亏
-   * - 真实总资产 = account.total + unrealisedPnl
-   * 
-   * API返回说明：
-   * - totalBalance: 不包含未实现盈亏的总资产（用于计算已实现收益）
-   * - unrealisedPnl: 当前持仓的未实现盈亏
-   * 
-   * 前端显示：
-   * - 总资产显示 = totalBalance + unrealisedPnl（实时反映持仓盈亏）
+   * account.total 是交易所返回的净值（含未实现盈亏），与 SmartTrade2 的 totalEquity 一致
    */
   app.get("/api/account", async (c) => {
     try {
@@ -76,13 +66,11 @@ export function createApiRoutes() {
         ? Number.parseFloat(initialResult.rows[0].total_value as string)
         : 100;
       
-      // Gate.io 的 account.total 不包含未实现盈亏
-      // 总资产（不含未实现盈亏）= account.total
-      const unrealisedPnl = Number.parseFloat(account.unrealisedPnl || "0");
+      // 净值 = account.total（交易所已包含未实现盈亏，无需手动加减）
       const totalBalance = Number.parseFloat(account.total || "0");
+      const unrealisedPnl = Number.parseFloat(account.unrealisedPnl || "0");
 
-      // 收益率 = (总资产 - 初始资金) / 初始资金 * 100
-      // 总资产不包含未实现盈亏，收益率反映已实现盈亏
+      // 收益率 = (净值 - 初始资金) / 初始资金 * 100
       const returnPercent = ((totalBalance - initialBalance) / initialBalance) * 100;
 
       // 查询累计手续费（所有已平仓交易的手续费总和）
@@ -96,11 +84,11 @@ export function createApiRoutes() {
       const rebateAmount = totalFees * (feeRebatePercent / 100);
 
       return c.json({
-        totalBalance,  // 总资产（不包含未实现盈亏）
+        totalBalance,  // 净值（交易所返回，含未实现盈亏）
         availableBalance: Number.parseFloat(account.available || "0"),
         positionMargin: Number.parseFloat(account.positionMargin || "0"),
         unrealisedPnl,
-        returnPercent,  // 收益率（不包含未实现盈亏）
+        returnPercent,  // 收益率（基于净值计算，已含未实现盈亏）
         initialBalance,
         totalFees,           // 累计手续费
         feeRebatePercent,    // 返佣比例（%）

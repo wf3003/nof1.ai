@@ -612,10 +612,7 @@ async function calculateSharpeRatio(): Promise<number> {
  * Gate.io 的 account.total 不包含未实现盈亏
  * 总资产（不含未实现盈亏）= account.total = available + positionMargin
  * 
- * 因此：
- * - totalBalance 不包含未实现盈亏
- * - returnPercent 反映已实现盈亏
- * - 前端显示时需加上 unrealisedPnl
+ * 与 SmartTrade2 一致：直接返回交易所净值（含未实现盈亏）
  */
 async function getAccountInfo() {
   const exchangeClient = createExchangeClient();
@@ -644,22 +641,20 @@ async function getAccountInfo() {
     const availableBalance = Number.parseFloat(account.available || "0");
     const unrealisedPnl = Number.parseFloat(account.unrealisedPnl || "0");
     
-    // Gate.io 的 account.total 不包含未实现盈亏
-    // totalBalance 直接使用 account.total（不包含未实现盈亏）
+    // 净值 = account.total（交易所已包含未实现盈亏，无需手动加减）
     const totalBalance = accountTotal;
     
-    // 实时收益率 = (总资产 - 初始资金) / 初始资金 * 100
-    // 总资产不包含未实现盈亏，收益率反映已实现盈亏
+    // 收益率 = (净值 - 初始资金) / 初始资金 * 100
     const returnPercent = ((totalBalance - initialBalance) / initialBalance) * 100;
     
     // 计算 Sharpe Ratio
     const sharpeRatio = await calculateSharpeRatio();
     
     return {
-      totalBalance,      // 总资产（不包含未实现盈亏）
+      totalBalance,      // 净值（交易所返回，含未实现盈亏）
       availableBalance,  // 可用余额
       unrealisedPnl,     // 未实现盈亏
-      returnPercent,     // 收益率（不包含未实现盈亏）
+      returnPercent,     // 收益率（基于净值计算，已含未实现盈亏）
       sharpeRatio,       // 夏普比率
       initialBalance,    // 初始净值（用于计算回撤）
       peakBalance,       // 峰值净值（用于计算回撤）

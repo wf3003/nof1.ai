@@ -49,13 +49,13 @@ export async function recordAccountAssets(skipLog: boolean = false) {
     
     // Extract account data
     // Gate.io 的 account.total 不包含未实现盈亏
-    // 需要主动加上 unrealisedPnl 才是真实的总资产
+    // account.total 是交易所返回的净值（含未实现盈亏），直接使用
     const accountTotal = Number.parseFloat(account.total || "0");
     const availableBalance = Number.parseFloat(account.available || "0");
     const unrealisedPnl = Number.parseFloat(account.unrealisedPnl || "0");
     
-    // Total balance = account.total + unrealisedPnl (包含未实现盈亏的总资产)
-    const totalBalance = accountTotal + unrealisedPnl;
+    // 净值 = account.total（交易所已含未实现盈亏，无需手动加减）
+    const totalBalance = accountTotal;
     
     // Get initial balance from database
     const initialResult = await dbClient.execute(

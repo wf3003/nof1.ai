@@ -43,9 +43,11 @@ export const getAccountBalanceTool = createTool({
     try {
       const account = await client.getFuturesAccount();
       
+      // 净值 = account.total（交易所已包含未实现盈亏）
+      const totalBalance = Number.parseFloat(account.total || "0");
       return {
         currency: account.currency,
-        totalBalance: Number.parseFloat(account.total || "0"),
+        totalBalance,
         availableBalance: Number.parseFloat(account.available || "0"),
         positionMargin: Number.parseFloat(account.positionMargin || "0"),
         orderMargin: Number.parseFloat(account.orderMargin || "0"),
@@ -207,7 +209,7 @@ export const calculateRiskTool = createTool({
         client.getPositions(),
       ]);
       
-      // account.total 包含了未实现盈亏，需要减去以得到实际总资产
+      // 已实现余额 = account.total - unrealisedPnl（风控用已实现余额更保守）
       const unrealisedPnl = Number.parseFloat(account.unrealisedPnl || "0");
       const totalBalance = Number.parseFloat(account.total || "0") - unrealisedPnl;
       const availableBalance = Number.parseFloat(account.available || "0");

@@ -542,8 +542,8 @@ async function checkPeakPnlAndTrailingStop(autoCloseEnabled: boolean) {
       // 获取账户信息
       const account = await exchangeClient.getFuturesAccount();
       const accountTotal = Number.parseFloat(account.total || "0");
-      const unrealisedPnl = Number.parseFloat(account.unrealisedPnl || "0");
-      const totalBalance = accountTotal + unrealisedPnl; // 包含未实现盈亏的真实总资产
+      // 净值 = account.total（交易所已含未实现盈亏）
+      const totalBalance = accountTotal;
       
       // 初始化峰值（首次运行）
       if (accountPeakBalance === 0) {

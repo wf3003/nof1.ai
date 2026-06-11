@@ -257,7 +257,7 @@ export const openPositionTool = createTool({
         logger.info(`${symbol} 距离上次平仓已 ${minutesSinceClose.toFixed(1)} 分钟，通过冷静期检查（冷静期：${cooldownMinutes.toFixed(1)}分钟 / ${SAME_SYMBOL_COOLDOWN_CYCLES}个周期）`);
       }
       
-      // 4. 获取账户信息
+      // 4. 获取账户信息（已实现余额 = account.total - unrealisedPnl，开仓金额用已实现余额更保守）
       const account = await client.getFuturesAccount();
       const unrealisedPnl = Number.parseFloat(account.unrealisedPnl || "0");
       const totalBalance = Number.parseFloat(account.total || "0") - unrealisedPnl;
@@ -1061,7 +1061,7 @@ export const closePositionTool = createTool({
         }
       }
       
-      // 获取账户信息用于记录当前总资产
+      // 获取账户信息用于记录当前净值（account.total 已含未实现盈亏）
       const account = await client.getFuturesAccount();
       const totalBalance = Number.parseFloat(account.total || "0");
       

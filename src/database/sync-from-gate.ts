@@ -44,14 +44,13 @@ async function syncFromGate() {
     const availableBalance = Number.parseFloat(account.available || "0");
     const unrealizedPnl = Number.parseFloat(account.unrealisedPnl || "0");
     
-    // Gate.io 的 account.total 不包含未实现盈亏
-    // 真实总资产 = account.total + unrealisedPnl
-    const currentBalance = accountTotal + unrealizedPnl;
+    // account.total 是交易所返回的净值（含未实现盈亏），直接使用
+    const currentBalance = accountTotal;
     
     logger.info(`\n📊 Gate.io 当前账户状态:`);
     logger.info(`   账户余额: ${accountTotal} USDT`);
     logger.info(`   未实现盈亏: ${unrealizedPnl >= 0 ? '+' : ''}${unrealizedPnl} USDT`);
-    logger.info(`   总资产(含盈亏): ${currentBalance} USDT`);
+    logger.info(`   总资产(净值): ${currentBalance} USDT`);
     logger.info(`   可用资金: ${availableBalance} USDT`);
     
     // 2. 获取持仓信息

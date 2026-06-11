@@ -123,17 +123,12 @@ async function loadAccountData() {
         updateValueWithAnimation('unrealisedPnl', pnlValue);
         unrealisedPnlEl.className = 'value ' + (data.unrealisedPnl >= 0 ? 'positive' : 'negative');
         
-        // 更新总资产
-        // API 返回的 totalBalance 不包含未实现盈亏
-        // 显示的总资产需要加上未实现盈亏，以便实时反映持仓盈亏
-        const totalBalanceWithPnl = data.totalBalance + data.unrealisedPnl;
-        updateValueWithAnimation('totalBalance', totalBalanceWithPnl.toFixed(2));
+        // 更新总资产（API 已返回含未实现盈亏的净值）
+        updateValueWithAnimation('totalBalance', data.totalBalance.toFixed(2));
 
-        // 更新收益率（带符号和颜色）
-        // 收益率 = (总资产 - 初始资金) / 初始资金 * 100
-        // 使用包含未实现盈亏的总资产计算，会实时变化
+        // 更新收益率（API 已返回含未实现盈亏的收益率）
         const returnPercentEl = document.getElementById('returnPercent');
-        const returnPercent = ((totalBalanceWithPnl - data.initialBalance) / data.initialBalance) * 100;
+        const returnPercent = data.returnPercent;
         const returnValue = (returnPercent >= 0 ? '+' : '') + returnPercent.toFixed(2) + '%';
         updateValueWithAnimation('returnPercent', returnValue);
         returnPercentEl.className = 'value ' + (returnPercent >= 0 ? 'positive' : 'negative');
