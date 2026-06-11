@@ -371,7 +371,7 @@ export class OkxClient {
         // 转换为 Gate 格式
         return {
           currency: "USDT",
-          total: account.totalEq || usdtDetail.eq, // 全币种总权益折合USD（与OKX网页一致）
+          total: usdtDetail.eq, // USDT 币种权益（合约交易用 USDT 保证金，与 SmartTrade2 一致）
           available: usdtDetail.availBal, // 可用保证金
           positionMargin: usdtDetail.frozenBal, // 持仓占用保证金
           orderMargin: usdtDetail.ordFrozen || "0", // 挂单占用保证金
