@@ -132,6 +132,18 @@ function checkTrailingStop(peakPnlPercent: number, currentPnlPercent: number): {
     }
   }
   
+  // 固定回撤保护：从峰值回落 ≥ 5% 即平仓（与动态线取优，谁先到用谁）
+  const rawDrawdown = peakPnlPercent - currentPnlPercent;
+  if (rawDrawdown >= 5) {
+    const fixedStopAt = peakPnlPercent - 5;
+    return {
+      shouldClose: true,
+      level: "fixed_5pct",
+      description: `峰值${peakPnlPercent.toFixed(2)}%，回撤${rawDrawdown.toFixed(1)}%≥5%，固定止损线${fixedStopAt.toFixed(1)}%已触发平仓`,
+      stopAt: fixedStopAt,
+    };
+  }
+
   // 峰值未达到任何触发点
   return {
     shouldClose: false,
@@ -667,13 +679,25 @@ async function checkPeakPnlAndTrailingStop(autoCloseEnabled: boolean) {
       const side = size > 0 ? "long" : "short";
       const quantity = Math.abs(size);
       const entryPrice = Number.parseFloat(pos.entryPrice || "0");
-      const currentPrice = Number.parseFloat(pos.markPrice || "0");
       const leverage = Number.parseInt(pos.leverage || "1");
       
-      // 验证数据有效性
-      if (entryPrice === 0 || currentPrice === 0 || leverage === 0) {
+      if (entryPrice === 0 || leverage === 0) {
         logger.warn(`${symbol} 数据无效，跳过峰值监控`);
         continue;
+      }
+      
+      // 优先用实时 ticker 价格（比 markPrice 更敏感）
+      let currentPrice = 0;
+      try {
+        const ticker = await exchangeClient.getTicker(pos.contract);
+        currentPrice = Number.parseFloat(ticker?.last || ticker?.close || "0");
+      } catch {}
+      if (currentPrice <= 0) {
+        currentPrice = Number.parseFloat(pos.markPrice || "0");
+        if (currentPrice <= 0) {
+          logger.warn(`${symbol} 价格无效，跳过峰值监控`);
+          continue;
+        }
       }
       
       // 计算盈利百分比（考虑杠杆）
@@ -726,10 +750,8 @@ async function checkPeakPnlAndTrailingStop(autoCloseEnabled: boolean) {
       // 使用 trailingStop 配置判断是否触发平仓
       const trailingStopResult = checkTrailingStop(history.peakPnlPercent, pnlPercent);
       
-      // 调试日志：每10次检查输出一次
-      if (history.checkCount % 10 === 0) {
-        logger.debug(`${symbol} 移动止盈监控: ${trailingStopResult.description}`);
-      }
+      // 临时 debug：每次检查都打日志，定位 BNB 不触发的问题
+      logger.info(`${symbol} 移动止盈检查: peak=${history.peakPnlPercent.toFixed(2)}% cur=${pnlPercent.toFixed(2)}% ${trailingStopResult.shouldClose ? '🚨触发' : '✅持有'} ${trailingStopResult.description}`);
       
       // 计算回退百分比（绝对值）
       const drawdownPercent = history.peakPnlPercent - pnlPercent;
