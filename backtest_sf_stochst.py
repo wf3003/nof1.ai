@@ -18,13 +18,14 @@ def fetch_data():
         v = os.environ.get(k)
         if v: px = {'http':v,'https':v}; break
     
-    now = int(time.time()*1000); since = now - YEARS*365*24*60*60*1000
-    all_c, errs = [], 0
-    while since < now and errs < 5:
+    now = int(time.time()*1000); start_ts = now - YEARS*365*24*60*60*1000
+    all_c, errs, oldest = [], 0, now
+    print("  Fetching...", flush=True)
+    while oldest > start_ts and errs < 5:
         try:
             if EXCHANGE == 'okx':
                 sym = SYMBOL.replace('/','-')
-                p = {'instId':sym+'-SWAP','bar':TIMEFRAME,'after':str(since),'limit':'300'}
+                p = {'instId':sym+'-SWAP','bar':TIMEFRAME,'after':str(oldest),'limit':'300'}
                 r = requests.get("https://www.okx.com/api/v5/market/history-candles",params=p,proxies=px,timeout=15)
                 if r.status_code != 200:
                     p['instId'] = sym
@@ -32,16 +33,22 @@ def fetch_data():
                 data = r.json().get('data',[]) if r.status_code==200 else []
                 batch = [[int(c[0]),float(c[2]),float(c[3]),float(c[4]),float(c[1]),float(c[5])] for c in data]
             elif EXCHANGE == 'binance':
-                p = {'symbol':SYMBOL.replace('/',''),'interval':TIMEFRAME,'startTime':since,'limit':1000}
+                p = {'symbol':SYMBOL.replace('/',''),'interval':TIMEFRAME,'endTime':oldest,'limit':1000}
                 r = requests.get("https://api.binance.com/api/v3/klines",params=p,proxies=px,timeout=15)
                 data = r.json()
                 batch = [[int(c[0]),float(c[2]),float(c[3]),float(c[4]),float(c[1]),float(c[5])] for c in data] if isinstance(data,list) else []
             errs = 0
             if not batch: break
-            all_c.extend(batch)
-            since = max(c[0] for c in batch)+1
-            print(f"  {len(all_c)}", end='\r')
-            time.sleep(0.3)
+            # dedup on the fly
+            seen = set(c[0] for c in all_c)
+            new_batch = [c for c in batch if c[0] not in seen]
+            all_c.extend(new_batch)
+            # Move backwards: OKX returns newest->oldest, so take the min (oldest)
+            oldest = min(c[0] for c in batch) - 1
+            if oldest < start_ts: break
+            if len(all_c) % 1000 == 0:
+                print(f"  {len(all_c)} candles", flush=True)
+            time.sleep(0.15)
         except Exception as e:
             errs += 1; print(f"\n  [{errs}] {str(e)[:80]}"); time.sleep(3)
     
@@ -110,6 +117,29 @@ def run(c,h,l,v):
         else: d[i]=1 if k[i]<ls[i] else -1
         ts[i]=ls[i] if d[i]==-1 else us[i]
     
+    # Two-Pole Oscillator
+    sma1 = np.convolve(c, np.ones(25)/25, mode='same')
+    diff = (c - sma1) - np.convolve(c - sma1, np.ones(25)/25, mode='same')
+    diff[diff == 0] = np.nan
+    stdev25 = np.array([np.nanstd(c[max(0,i-24):i+1] - sma1[max(0,i-24):i+1]) for i in range(n)])
+    sma_n = diff / np.where(stdev25 > 0, stdev25, 1)
+
+    twop = np.full(n, np.nan)
+    alpha = 2.0 / (15 + 1)
+    s1, s2 = np.nan, np.nan
+    for i in range(n):
+        v = sma_n[i]
+        if np.isnan(v): continue
+        s1 = v if np.isnan(s1) else (1-alpha)*s1 + alpha*v
+        s2 = s1 if np.isnan(s2) else (1-alpha)*s2 + alpha*s1
+        twop[i] = s2
+
+    twop_4 = np.roll(twop, 4)
+
+    # Veto: two_p > 0 → no long, two_p < 0 → no short
+    v6l = (sf_l) & (twop > 0)
+    v6s = (sf_s) & (twop < 0)
+
     print("Indicators done")
     
     def bt(label, vlong=None, vshort=None):
@@ -152,7 +182,11 @@ def run(c,h,l,v):
     b3=bt("SF + StochST disagree", v4l, v4s)
     v5l=v3l|v4l; v5s=v3s|v4s
     b4=bt("SF + Combined veto", v5l, v5s)
-    print(f"\n  Blocks: 40/60={np.sum(v3l|v3s)}  StochST={np.sum(v4l|v4s)}  Combined={np.sum(v5l|v5s)}")
+    b5=bt("SF + TwoPole veto", v6l, v6s)
+    v7l=v5l|v6l; v7s=v5s|v6s
+    b6=bt("SF + All veto", v7l, v7s)
+    print(f"\n  Blocks: 40/60={np.sum(v3l|v3s)}  StochST={np.sum(v4l|v4s)}  "
+          f"TwoPole={np.sum(v6l|v6s)}  All={np.sum(v7l|v7s)}")
 
 if __name__=="__main__":
     ts=time.time()
