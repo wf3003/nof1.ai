@@ -5,8 +5,19 @@ import numpy as np, time, os
 cache = "sf_stochst_cache.npz"
 if not os.path.exists(cache):
     print("Cache not found! Run backtest_sf_stochst.py first"); exit(1)
-d = np.load(cache); c=d['c']; h=d['h']; l=d['l']; v=d['v']; n=len(c)
-print(f"Data: {n} candles, ${c[0]:.0f}~${c[-1]:.0f}")
+d = np.load(cache); c5=d['c']; h5=d['h']; l5=d['l']; v5=d['v']; n5=len(c5)
+
+# Resample 5m → 15m
+step = 3; n = n5 // step
+o15 = np.array([c5[i*step] for i in range(n)])
+h15 = np.array([np.max(h5[i*step:(i+1)*step]) for i in range(n)])
+l15 = np.array([np.min(l5[i*step:(i+1)*step]) for i in range(n)])
+c15 = np.array([c5[(i+1)*step-1] for i in range(n)])
+v15 = np.array([np.sum(v5[i*step:(i+1)*step]) for i in range(n)])
+c=c15; h=h15; l=l15; v=v15
+
+print(f"5m: {n5} → 15m: {n} candles")
+print(f"${c[0]:.0f}~${c[-1]:.0f}")
 
 def wma(s,ln):
     w=np.arange(1,ln+1); r=np.full(len(s),np.nan)
@@ -82,7 +93,7 @@ for i in range(14-1+3,n):
     k[i]=100*(rsi[i]-ll)/(hh-ll) if hh>ll else 50
 us=np.full(n,np.nan); ls=np.full(n,np.nan); d=np.full(n,0); ts=np.full(n,np.nan)
 for i in range(60,n):
-    u=k[i]+10; lv=k[i]-10
+    u=k[i]+3; lv=k[i]-3
     if np.isnan(us[i-1]): us[i]=u; ls[i]=lv
     else: us[i]=min(u,us[i-1]) if k[i-1]>us[i-1] else u; ls[i]=max(lv,ls[i-1]) if k[i-1]<ls[i-1] else lv
     if np.isnan(us[i-1]): d[i]=1
